@@ -1,10 +1,12 @@
 
-import React from 'react';
+import React, { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import LanguageSelector from './LanguageSelector';
 import { Separator } from '@/components/ui/separator';
-import { Save, Code } from 'lucide-react';
+import { Save, Code, Package } from 'lucide-react';
 import { toast } from 'sonner';
+import DependencyManager from './DependencyManager';
+import { Dialog, DialogContent } from '@/components/ui/dialog';
 
 interface NavbarProps {
   selectedLanguage: string;
@@ -12,6 +14,8 @@ interface NavbarProps {
 }
 
 const Navbar: React.FC<NavbarProps> = ({ selectedLanguage, onLanguageChange }) => {
+  const [isDependencyManagerOpen, setIsDependencyManagerOpen] = useState(false);
+  
   const handleSave = () => {
     toast.success("File saved successfully!");
   };
@@ -24,6 +28,10 @@ const Navbar: React.FC<NavbarProps> = ({ selectedLanguage, onLanguageChange }) =
     setTimeout(() => {
       toast.success("Code executed successfully!");
     }, 2000);
+  };
+
+  const toggleDependencyManager = () => {
+    setIsDependencyManagerOpen(!isDependencyManagerOpen);
   };
 
   return (
@@ -56,7 +64,26 @@ const Navbar: React.FC<NavbarProps> = ({ selectedLanguage, onLanguageChange }) =
           <Code className="h-4 w-4 mr-2" />
           Run
         </Button>
+        
+        <Button
+          size="sm"
+          variant="outline"
+          className="bg-editor-sidebar border-editor-border text-editor-text"
+          onClick={toggleDependencyManager}
+        >
+          <Package className="h-4 w-4 mr-2" />
+          Packages
+        </Button>
       </div>
+      
+      <Dialog open={isDependencyManagerOpen} onOpenChange={setIsDependencyManagerOpen}>
+        <DialogContent className="bg-editor-sidebar border-editor-border text-editor-text p-0 max-w-3xl">
+          <DependencyManager 
+            selectedLanguage={selectedLanguage} 
+            onClose={() => setIsDependencyManagerOpen(false)} 
+          />
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
