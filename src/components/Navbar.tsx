@@ -3,31 +3,38 @@ import React, { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import LanguageSelector from './LanguageSelector';
 import { Separator } from '@/components/ui/separator';
-import { Save, Code, Package } from 'lucide-react';
+import { Save, Code, Package, Settings, Play } from 'lucide-react';
 import { toast } from 'sonner';
 import DependencyManager from './DependencyManager';
 import { Dialog, DialogContent } from '@/components/ui/dialog';
+import ExecutionSettings, { ExecutionConfig } from './ExecutionSettings';
 
 interface NavbarProps {
   selectedLanguage: string;
   onLanguageChange: (language: string) => void;
+  onRunCode: () => void;
+  isRunning: boolean;
+  executionConfig: ExecutionConfig;
+  onExecutionConfigChange: (config: ExecutionConfig) => void;
 }
 
-const Navbar: React.FC<NavbarProps> = ({ selectedLanguage, onLanguageChange }) => {
+const Navbar: React.FC<NavbarProps> = ({ 
+  selectedLanguage, 
+  onLanguageChange,
+  onRunCode,
+  isRunning,
+  executionConfig,
+  onExecutionConfigChange
+}) => {
   const [isDependencyManagerOpen, setIsDependencyManagerOpen] = useState(false);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   
   const handleSave = () => {
     toast.success("File saved successfully!");
   };
 
-  const handleRun = () => {
-    toast.info("Running code...", {
-      description: "Executing on remote server"
-    });
-    
-    setTimeout(() => {
-      toast.success("Code executed successfully!");
-    }, 2000);
+  const handleSettings = () => {
+    setIsSettingsOpen(true);
   };
 
   const toggleDependencyManager = () => {
@@ -58,11 +65,12 @@ const Navbar: React.FC<NavbarProps> = ({ selectedLanguage, onLanguageChange }) =
         
         <Button 
           size="sm"
-          className="bg-editor-active hover:bg-blue-700 text-white"
-          onClick={handleRun}
+          className={`${isRunning ? 'bg-yellow-600' : 'bg-green-600'} hover:${isRunning ? 'bg-yellow-700' : 'bg-green-700'} text-white`}
+          onClick={onRunCode}
+          disabled={isRunning}
         >
-          <Code className="h-4 w-4 mr-2" />
-          Run
+          <Play className="h-4 w-4 mr-2" />
+          {isRunning ? 'Running...' : 'Run'}
         </Button>
         
         <Button
@@ -74,6 +82,16 @@ const Navbar: React.FC<NavbarProps> = ({ selectedLanguage, onLanguageChange }) =
           <Package className="h-4 w-4 mr-2" />
           Packages
         </Button>
+        
+        <Button
+          size="sm"
+          variant="outline"
+          className="bg-editor-sidebar border-editor-border text-editor-text"
+          onClick={handleSettings}
+        >
+          <Settings className="h-4 w-4 mr-2" />
+          Settings
+        </Button>
       </div>
       
       <Dialog open={isDependencyManagerOpen} onOpenChange={setIsDependencyManagerOpen}>
@@ -84,6 +102,13 @@ const Navbar: React.FC<NavbarProps> = ({ selectedLanguage, onLanguageChange }) =
           />
         </DialogContent>
       </Dialog>
+      
+      <ExecutionSettings
+        isOpen={isSettingsOpen}
+        onClose={() => setIsSettingsOpen(false)}
+        config={executionConfig}
+        onConfigChange={onExecutionConfigChange}
+      />
     </div>
   );
 };
