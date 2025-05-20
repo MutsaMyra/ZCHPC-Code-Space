@@ -105,6 +105,7 @@
   @apply font-bold;
 }
 
+/* Fix: Replace @apply italic with direct CSS rule to avoid circular dependency */
 .token.italic {
-  @apply italic;
+  font-style: italic;
 }
