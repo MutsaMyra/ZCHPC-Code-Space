@@ -1,3 +1,4 @@
+
 import type { Config } from "tailwindcss";
 
 export default {
@@ -61,6 +62,15 @@ export default {
 					'accent-foreground': 'hsl(var(--sidebar-accent-foreground))',
 					border: 'hsl(var(--sidebar-border))',
 					ring: 'hsl(var(--sidebar-ring))'
+				},
+				editor: {
+					DEFAULT: '#1E1E1E',  // Dark editor background
+					sidebar: '#252526',  // Sidebar background
+					highlight: '#264F78', // Highlight color
+					active: '#007ACC',   // Active selection
+					text: '#D4D4D4',     // Editor text
+					line: '#282828',     // Line highlight
+					border: '#444444',   // Border color
 				}
 			},
 			borderRadius: {
