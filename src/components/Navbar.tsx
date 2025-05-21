@@ -1,9 +1,9 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import LanguageSelector from './LanguageSelector';
 import { Separator } from '@/components/ui/separator';
-import { Save, Code, Package, Settings, Play } from 'lucide-react';
+import { Save, Code, Package, Settings, Play, Wifi, WifiOff } from 'lucide-react';
 import { toast } from 'sonner';
 import DependencyManager from './DependencyManager';
 import { Dialog, DialogContent } from '@/components/ui/dialog';
@@ -16,6 +16,7 @@ interface NavbarProps {
   isRunning: boolean;
   executionConfig: ExecutionConfig;
   onExecutionConfigChange: (config: ExecutionConfig) => void;
+  isOnline: boolean;
 }
 
 const Navbar: React.FC<NavbarProps> = ({ 
@@ -24,13 +25,18 @@ const Navbar: React.FC<NavbarProps> = ({
   onRunCode,
   isRunning,
   executionConfig,
-  onExecutionConfigChange
+  onExecutionConfigChange,
+  isOnline
 }) => {
   const [isDependencyManagerOpen, setIsDependencyManagerOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   
   const handleSave = () => {
-    toast.success("File saved successfully!");
+    if (isOnline) {
+      toast.success("File saved to cloud storage");
+    } else {
+      toast.success("File saved locally");
+    }
   };
 
   const handleSettings = () => {
@@ -46,6 +52,11 @@ const Navbar: React.FC<NavbarProps> = ({
       <div className="flex items-center space-x-2">
         <h1 className="text-lg font-bold text-white">CodeCraft</h1>
         <span className="text-xs px-2 py-1 bg-editor-active rounded-full">Beta</span>
+        {isOnline ? (
+          <Wifi className="h-4 w-4 text-green-500" />
+        ) : (
+          <WifiOff className="h-4 w-4 text-yellow-500" />
+        )}
       </div>
       
       <Separator orientation="vertical" className="mx-4 h-8 bg-editor-border" />
@@ -60,7 +71,7 @@ const Navbar: React.FC<NavbarProps> = ({
           onClick={handleSave}
         >
           <Save className="h-4 w-4 mr-2" />
-          Save
+          Save {isOnline ? "to Cloud" : "Locally"}
         </Button>
         
         <Button 

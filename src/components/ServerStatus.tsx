@@ -5,9 +5,10 @@ import { Badge } from "@/components/ui/badge";
 
 interface ServerStatusProps {
   language: string;
+  isOnline: boolean;
 }
 
-const ServerStatus: React.FC<ServerStatusProps> = ({ language }) => {
+const ServerStatus: React.FC<ServerStatusProps> = ({ language, isOnline }) => {
   const [status, setStatus] = useState<'disconnected' | 'connecting' | 'connected'>('disconnected');
   const [serverInfo, setServerInfo] = useState({
     language: '',
@@ -15,7 +16,16 @@ const ServerStatus: React.FC<ServerStatusProps> = ({ language }) => {
     cpuLoad: '0%',
   });
 
+  // Reset connection status when going offline
+  useEffect(() => {
+    if (!isOnline && status !== 'disconnected') {
+      disconnectFromServer();
+    }
+  }, [isOnline, status]);
+
   const connectToServer = () => {
+    if (!isOnline) return;
+    
     setStatus('connecting');
     
     // Simulate connection delay
@@ -74,13 +84,23 @@ const ServerStatus: React.FC<ServerStatusProps> = ({ language }) => {
         </div>
       )}
 
-      <Button 
-        onClick={status !== 'connected' ? connectToServer : disconnectFromServer}
-        className="w-full bg-editor-active hover:bg-blue-700 text-white"
-        variant="default"
-      >
-        {status !== 'connected' ? 'Connect to Server' : 'Disconnect'}
-      </Button>
+      {isOnline ? (
+        <Button 
+          onClick={status !== 'connected' ? connectToServer : disconnectFromServer}
+          className="w-full bg-editor-active hover:bg-blue-700 text-white"
+          variant="default"
+        >
+          {status !== 'connected' ? 'Connect to Server' : 'Disconnect'}
+        </Button>
+      ) : (
+        <Button 
+          disabled
+          className="w-full bg-gray-600 text-gray-300 cursor-not-allowed"
+          variant="default"
+        >
+          Offline Mode - Server Unavailable
+        </Button>
+      )}
     </div>
   );
 };

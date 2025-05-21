@@ -16,67 +16,16 @@ import {
   ExecutionConfig, 
   ExecutionResult 
 } from '../services/executionService';
-
-const generateSampleFiles = () => {
-  const sampleFiles: FileNode[] = [
-    {
-      id: 'examples',
-      name: 'Examples',
-      type: 'folder',
-      children: languages.map((lang) => ({
-        id: `example-${lang.id}`,
-        name: `Sample${lang.extension}`,
-        type: 'file',
-        extension: lang.extension,
-      })),
-    },
-    {
-      id: 'project',
-      name: 'My Project',
-      type: 'folder',
-      children: [
-        {
-          id: 'src',
-          name: 'src',
-          type: 'folder',
-          children: [
-            {
-              id: 'main',
-              name: 'main.js',
-              type: 'file',
-              extension: '.js',
-              content: 'console.log("Hello World!");'
-            },
-          ],
-        },
-        {
-          id: 'docs',
-          name: 'docs',
-          type: 'folder',
-          children: [
-            {
-              id: 'readme',
-              name: 'README.md',
-              type: 'file',
-              extension: '.md',
-              content: '# My Project\n\nWelcome to my project!'
-            },
-          ],
-        },
-      ],
-    },
-  ];
-
-  return sampleFiles;
-};
+import { fileSystemService } from '../services/fileSystemService';
 
 const Index = () => {
   const [selectedLanguage, setSelectedLanguage] = useState('javascript');
-  const [files, setFiles] = useState<FileNode[]>(generateSampleFiles());
+  const [files, setFiles] = useState<FileNode[]>([]);
   const [selectedFile, setSelectedFile] = useState<FileNode | null>(null);
   const [editorContent, setEditorContent] = useState<string>('');
   const [isRunning, setIsRunning] = useState(false);
   const [terminalOutput, setTerminalOutput] = useState<string[]>([]);
+  const [isOnline, setIsOnline] = useState(navigator.onLine);
   const [executionConfig, setExecutionConfig] = useState<ExecutionConfig>({
     mode: 'online',
     hardware: 'cpu',
@@ -86,6 +35,25 @@ const Index = () => {
     timeout: 30
   });
   const [lastExecutionResult, setLastExecutionResult] = useState<ExecutionResult | null>(null);
+  
+  // Update online status when connection changes
+  useEffect(() => {
+    const handleOnline = () => setIsOnline(true);
+    const handleOffline = () => setIsOnline(false);
+    
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+    
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, []);
+  
+  // Load files based on connection status
+  useEffect(() => {
+    setFiles(fileSystemService.getFiles());
+  }, [isOnline]);
   
   useEffect(() => {
     // Reset selected file when changing language
@@ -100,10 +68,11 @@ const Index = () => {
         setExecutionConfig(prev => ({ ...prev, mode: recommendedMode }));
       }
     }
-  }, [executionConfig.autoDetect]);
+  }, [executionConfig.autoDetect, isOnline]);
   
   const handleFileSelect = (file: FileNode) => {
     setSelectedFile(file);
+    setEditorContent(file.content || '');
   };
   
   const handleEditorChange = (value: string | undefined) => {
@@ -111,6 +80,9 @@ const Index = () => {
       setEditorContent(value);
       
       // Update file content
+      const updatedFile = { ...selectedFile, content: value };
+      
+      // Update files array
       setFiles(prevFiles => {
         const updateFileContent = (nodes: FileNode[]): FileNode[] => {
           return nodes.map(node => {
@@ -139,7 +111,8 @@ const Index = () => {
 
     setIsRunning(true);
     setTerminalOutput([
-      `[${new Date().toLocaleTimeString()}] Running ${selectedFile.name} in ${executionConfig.mode} mode using ${executionConfig.hardware.toUpperCase()}...`
+      `[${new Date().toLocaleTimeString()}] Running ${selectedFile.name} in ${executionConfig.mode} mode using ${executionConfig.hardware.toUpperCase()}...`,
+      isOnline ? 'Network connected: Remote execution available' : 'Network disconnected: Using local execution only'
     ]);
 
     try {
@@ -190,12 +163,19 @@ const Index = () => {
         isRunning={isRunning}
         executionConfig={executionConfig}
         onExecutionConfigChange={setExecutionConfig}
+        isOnline={isOnline}
       />
       
       <ResizablePanelGroup direction="horizontal" className="flex-1">
         <ResizablePanel defaultSize={15} minSize={10} maxSize={30} className="bg-editor-sidebar border-r border-editor-border">
           <div className="p-4">
-            <h2 className="text-sm font-semibold mb-2">Files</h2>
+            <div className="flex items-center justify-between mb-2">
+              <h2 className="text-sm font-semibold">Files</h2>
+              <Badge className={isOnline ? "bg-blue-600" : "bg-yellow-600"}>
+                {isOnline ? "Cloud Storage" : "Local Storage"}
+              </Badge>
+            </div>
+            
             <FileExplorer 
               files={files} 
               onFileSelect={handleFileSelect}
@@ -205,47 +185,50 @@ const Index = () => {
           
           <Separator className="bg-editor-border" />
           
-          <ServerStatus language={selectedLanguage} />
+          <ServerStatus language={selectedLanguage} isOnline={isOnline} />
         </ResizablePanel>
         
         <ResizableHandle withHandle className="bg-editor-border" />
         
         <ResizablePanel defaultSize={85} className="bg-editor flex flex-col">
-          <div className="flex-1">
-            <MonacoEditor 
-              file={selectedFile} 
-              language={selectedLanguage}
-              onChange={handleEditorChange}
-            />
-          </div>
-          
-          <ResizablePanelGroup direction="vertical">
-            <ResizablePanel defaultSize={70} minSize={40}>
-              <div className="h-full w-full"></div>
-            </ResizablePanel>
-            
-            <ResizableHandle withHandle className="bg-editor-border" />
-            
-            <ResizablePanel defaultSize={30} minSize={10} className="p-4 border-t border-editor-border">
-              <div className="flex justify-between items-center mb-3">
-                <h3 className="text-sm font-medium">Output</h3>
-                <div className="flex space-x-2">
-                  {executionConfig.mode === 'online' ? (
-                    <Badge className="bg-blue-600">ONLINE</Badge>
-                  ) : (
-                    <Badge className="bg-green-600">LOCAL</Badge>
-                  )}
-                  <Badge className="bg-editor-sidebar">
-                    {executionConfig.hardware.toUpperCase()} 
-                    {executionConfig.hardware === 'cpu' 
-                      ? ` (${executionConfig.cpuCores} cores)` 
-                      : ` (${executionConfig.gpuMemory} GB)`}
-                  </Badge>
-                </div>
+          {selectedFile ? (
+            <div className="flex-1">
+              <MonacoEditor 
+                file={selectedFile} 
+                language={selectedLanguage}
+                onChange={handleEditorChange}
+              />
+            </div>
+          ) : (
+            <div className="flex-1 flex items-center justify-center text-editor-text-muted">
+              <div className="text-center p-6">
+                <h3 className="text-xl font-semibold mb-2">No File Selected</h3>
+                <p>Select a file from the explorer to start coding</p>
               </div>
-              <Terminal output={terminalOutput} isRunning={isRunning} />
-            </ResizablePanel>
-          </ResizablePanelGroup>
+            </div>
+          )}
+          
+          <ResizableHandle withHandle className="bg-editor-border" />
+          
+          <ResizablePanel defaultSize={30} minSize={10} className="p-4 border-t border-editor-border">
+            <div className="flex justify-between items-center mb-3">
+              <h3 className="text-sm font-medium">Output</h3>
+              <div className="flex space-x-2">
+                {executionConfig.mode === 'online' && isOnline ? (
+                  <Badge className="bg-blue-600">ONLINE</Badge>
+                ) : (
+                  <Badge className="bg-green-600">LOCAL</Badge>
+                )}
+                <Badge className="bg-editor-sidebar">
+                  {executionConfig.hardware.toUpperCase()} 
+                  {executionConfig.hardware === 'cpu' 
+                    ? ` (${executionConfig.cpuCores} cores)` 
+                    : ` (${executionConfig.gpuMemory} GB)`}
+                </Badge>
+              </div>
+            </div>
+            <Terminal output={terminalOutput} isRunning={isRunning} />
+          </ResizablePanel>
         </ResizablePanel>
       </ResizablePanelGroup>
     </div>

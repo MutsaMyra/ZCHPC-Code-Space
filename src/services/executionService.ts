@@ -1,5 +1,6 @@
 
 import { toast } from "sonner";
+import { fileSystemService } from "./fileSystemService";
 
 export type ExecutionMode = 'online' | 'offline';
 export type HardwareType = 'cpu' | 'gpu';
@@ -47,6 +48,10 @@ export class ExecutionService {
   public getRecommendedMode(): ExecutionMode {
     return this.isOnline ? 'online' : 'offline';
   }
+
+  public getConnectionStatus(): boolean {
+    return this.isOnline;
+  }
   
   public async executeCode(
     code: string, 
@@ -57,6 +62,12 @@ export class ExecutionService {
     const effectiveMode = config.autoDetect 
       ? this.getRecommendedMode() 
       : config.mode;
+    
+    // Force offline mode if not connected, regardless of settings
+    if (!this.isOnline && effectiveMode === 'online') {
+      toast.warning('No internet connection. Falling back to offline execution.');
+      return this.executeLocally(code, language, config);
+    }
     
     if (effectiveMode === 'online') {
       return this.executeOnRemoteServer(code, language, config);
