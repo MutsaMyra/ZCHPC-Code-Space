@@ -12,6 +12,7 @@ interface MonacoEditorProps {
 
 const MonacoEditor: React.FC<MonacoEditorProps> = ({ file, language, onChange }) => {
   const editorRef = useRef<any>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
   
   const handleEditorDidMount: OnMount = (editor) => {
     editorRef.current = editor;
@@ -21,14 +22,41 @@ const MonacoEditor: React.FC<MonacoEditorProps> = ({ file, language, onChange })
     
     // Set up window resize listener for responsiveness
     const handleResize = () => {
-      editor.layout();
+      if (editor) {
+        editor.layout();
+      }
     };
     
     window.addEventListener('resize', handleResize);
+    
+    // Initial layout adjustment
+    setTimeout(() => {
+      handleResize();
+    }, 100);
+    
     return () => {
       window.removeEventListener('resize', handleResize);
     };
   };
+  
+  // Make sure the editor resizes when its container resizes
+  useEffect(() => {
+    if (!editorRef.current) return;
+    
+    const resizeObserver = new ResizeObserver(() => {
+      if (editorRef.current) {
+        editorRef.current.layout();
+      }
+    });
+    
+    if (containerRef.current) {
+      resizeObserver.observe(containerRef.current);
+    }
+    
+    return () => {
+      resizeObserver.disconnect();
+    };
+  }, []);
   
   // Map file extension to Monaco language identifier
   const getMonacoLanguage = () => {
@@ -193,7 +221,7 @@ public class DemoApplication {
   };
 
   return (
-    <div className="h-full w-full flex-1 overflow-hidden">
+    <div ref={containerRef} className="h-full w-full flex-1 overflow-hidden">
       <Editor
         height="100%"
         theme="vs-dark"

@@ -15,13 +15,15 @@ const EditorPanel: React.FC<EditorPanelProps> = ({
   onEditorChange 
 }) => {
   return (
-    <div className="h-full">
+    <div className="h-full w-full overflow-hidden flex">
       {selectedFile ? (
-        <MonacoEditor 
-          file={selectedFile} 
-          language={selectedLanguage}
-          onChange={onEditorChange}
-        />
+        <div className="flex-1 h-full">
+          <MonacoEditor 
+            file={selectedFile} 
+            language={selectedLanguage}
+            onChange={onEditorChange}
+          />
+        </div>
       ) : (
         <div className="flex-1 flex items-center justify-center text-editor-text-muted h-full">
           <div className="text-center p-6">

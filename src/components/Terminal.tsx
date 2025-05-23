@@ -1,13 +1,16 @@
 
 import React, { useRef, useEffect } from 'react';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { Button } from '@/components/ui/button';
+import { Trash2 } from 'lucide-react';
 
 interface TerminalProps {
   output: string[];
   isRunning: boolean;
+  onClear?: () => void;
 }
 
-const Terminal: React.FC<TerminalProps> = ({ output, isRunning }) => {
+const Terminal: React.FC<TerminalProps> = ({ output, isRunning, onClear }) => {
   const scrollRef = useRef<HTMLDivElement>(null);
   
   useEffect(() => {
@@ -21,12 +24,24 @@ const Terminal: React.FC<TerminalProps> = ({ output, isRunning }) => {
     <div className="bg-editor-sidebar border border-editor-border rounded-md overflow-hidden h-full">
       <div className="bg-editor-border px-3 py-1.5 text-xs font-medium flex items-center justify-between">
         <span>Terminal Output</span>
-        {isRunning && (
-          <span className="flex items-center">
-            <span className="h-2 w-2 rounded-full bg-green-500 mr-2 animate-pulse"></span>
-            Running...
-          </span>
-        )}
+        <div className="flex items-center gap-2">
+          {isRunning && (
+            <span className="flex items-center">
+              <span className="h-2 w-2 rounded-full bg-green-500 mr-2 animate-pulse"></span>
+              Running...
+            </span>
+          )}
+          {onClear && output.length > 0 && (
+            <Button 
+              variant="ghost" 
+              size="icon" 
+              className="h-5 w-5 text-gray-400 hover:text-white hover:bg-transparent"
+              onClick={onClear}
+            >
+              <Trash2 size={14} />
+            </Button>
+          )}
+        </div>
       </div>
       
       <ScrollArea className="h-[calc(100%-32px)] p-3 font-mono text-sm">

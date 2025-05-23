@@ -20,7 +20,7 @@ const Index = () => {
   const [editorContent, setEditorContent] = useState<string>('');
   const [isOnline, setIsOnline] = useState(navigator.onLine);
   const [executionConfig, setExecutionConfig] = useState<ExecutionConfig>({
-    mode: 'online',
+    mode: navigator.onLine ? 'online' : 'offline',
     hardware: 'cpu',
     cpuCores: 4,
     gpuMemory: 4,
@@ -32,7 +32,8 @@ const Index = () => {
   const { 
     isRunning, 
     terminalOutput, 
-    runCode 
+    runCode,
+    clearTerminal
   } = useCodeExecution();
   
   // Update online status when connection changes
@@ -149,6 +150,7 @@ const Index = () => {
                 isRunning={isRunning}
                 executionConfig={executionConfig}
                 isOnline={isOnline}
+                onClearTerminal={clearTerminal}
               />
             </ResizablePanel>
           </ResizablePanelGroup>

@@ -25,6 +25,11 @@ export const useCodeExecution = () => {
       return;
     }
 
+    if (!selectedFile.content || selectedFile.content.trim() === '') {
+      toast.error('The file is empty');
+      return;
+    }
+
     setIsRunning(true);
     setTerminalOutput([
       `[${new Date().toLocaleTimeString()}] Running ${selectedFile.name} in ${executionConfig.mode} mode using ${executionConfig.hardware.toUpperCase()}...`,
@@ -32,10 +37,18 @@ export const useCodeExecution = () => {
     ]);
 
     try {
+      // Force local execution when offline
+      const effectiveConfig = {
+        ...executionConfig,
+        mode: isOnline ? executionConfig.mode : 'offline'
+      };
+
+      console.log(`Executing code: ${selectedFile.content.substring(0, 100)}...`);
+      
       const result = await executionService.executeCode(
-        selectedFile.content || '',
+        selectedFile.content,
         selectedLanguage,
-        executionConfig
+        effectiveConfig
       );
 
       setLastExecutionResult(result);
@@ -70,11 +83,16 @@ export const useCodeExecution = () => {
     }
   };
 
+  const clearTerminal = () => {
+    setTerminalOutput([]);
+  };
+
   return {
     isRunning,
     terminalOutput,
     lastExecutionResult,
     runCode,
+    clearTerminal,
     setTerminalOutput
   };
 };
