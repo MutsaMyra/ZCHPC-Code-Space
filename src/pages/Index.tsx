@@ -168,7 +168,7 @@ const Index = () => {
       
       <ResizablePanelGroup direction="horizontal" className="flex-1">
         <ResizablePanel defaultSize={15} minSize={10} maxSize={30} className="bg-editor-sidebar border-r border-editor-border">
-          <div className="p-4">
+          <div className="p-4 h-[calc(100%-180px)] overflow-y-auto">
             <div className="flex items-center justify-between mb-2">
               <h2 className="text-sm font-semibold">Files</h2>
               <Badge className={isOnline ? "bg-blue-600" : "bg-yellow-600"}>
@@ -190,45 +190,51 @@ const Index = () => {
         
         <ResizableHandle withHandle className="bg-editor-border" />
         
-        <ResizablePanel defaultSize={85} className="bg-editor flex flex-col">
-          {selectedFile ? (
-            <div className="flex-1">
-              <MonacoEditor 
-                file={selectedFile} 
-                language={selectedLanguage}
-                onChange={handleEditorChange}
-              />
-            </div>
-          ) : (
-            <div className="flex-1 flex items-center justify-center text-editor-text-muted">
-              <div className="text-center p-6">
-                <h3 className="text-xl font-semibold mb-2">No File Selected</h3>
-                <p>Select a file from the explorer to start coding</p>
+        <ResizablePanel defaultSize={85} className="bg-editor flex flex-col overflow-hidden">
+          <ResizablePanelGroup direction="vertical" className="h-full">
+            <ResizablePanel defaultSize={70} minSize={30} className="overflow-hidden">
+              {selectedFile ? (
+                <div className="h-full">
+                  <MonacoEditor 
+                    file={selectedFile} 
+                    language={selectedLanguage}
+                    onChange={handleEditorChange}
+                  />
+                </div>
+              ) : (
+                <div className="flex-1 flex items-center justify-center text-editor-text-muted h-full">
+                  <div className="text-center p-6">
+                    <h3 className="text-xl font-semibold mb-2">No File Selected</h3>
+                    <p>Select a file from the explorer to start coding</p>
+                  </div>
+                </div>
+              )}
+            </ResizablePanel>
+            
+            <ResizableHandle withHandle className="bg-editor-border" />
+            
+            <ResizablePanel defaultSize={30} minSize={20} className="p-4 border-t border-editor-border overflow-hidden">
+              <div className="flex justify-between items-center mb-3">
+                <h3 className="text-sm font-medium">Output</h3>
+                <div className="flex space-x-2">
+                  {executionConfig.mode === 'online' && isOnline ? (
+                    <Badge className="bg-blue-600">ONLINE</Badge>
+                  ) : (
+                    <Badge className="bg-green-600">LOCAL</Badge>
+                  )}
+                  <Badge className="bg-editor-sidebar">
+                    {executionConfig.hardware.toUpperCase()} 
+                    {executionConfig.hardware === 'cpu' 
+                      ? ` (${executionConfig.cpuCores} cores)` 
+                      : ` (${executionConfig.gpuMemory} GB)`}
+                  </Badge>
+                </div>
               </div>
-            </div>
-          )}
-          
-          <ResizableHandle withHandle className="bg-editor-border" />
-          
-          <ResizablePanel defaultSize={30} minSize={10} className="p-4 border-t border-editor-border">
-            <div className="flex justify-between items-center mb-3">
-              <h3 className="text-sm font-medium">Output</h3>
-              <div className="flex space-x-2">
-                {executionConfig.mode === 'online' && isOnline ? (
-                  <Badge className="bg-blue-600">ONLINE</Badge>
-                ) : (
-                  <Badge className="bg-green-600">LOCAL</Badge>
-                )}
-                <Badge className="bg-editor-sidebar">
-                  {executionConfig.hardware.toUpperCase()} 
-                  {executionConfig.hardware === 'cpu' 
-                    ? ` (${executionConfig.cpuCores} cores)` 
-                    : ` (${executionConfig.gpuMemory} GB)`}
-                </Badge>
+              <div className="h-[calc(100%-30px)]">
+                <Terminal output={terminalOutput} isRunning={isRunning} />
               </div>
-            </div>
-            <Terminal output={terminalOutput} isRunning={isRunning} />
-          </ResizablePanel>
+            </ResizablePanel>
+          </ResizablePanelGroup>
         </ResizablePanel>
       </ResizablePanelGroup>
     </div>

@@ -18,7 +18,7 @@ const Terminal: React.FC<TerminalProps> = ({ output, isRunning }) => {
   }, [output]);
   
   return (
-    <div className="bg-editor-sidebar border border-editor-border rounded-md overflow-hidden">
+    <div className="bg-editor-sidebar border border-editor-border rounded-md overflow-hidden h-full">
       <div className="bg-editor-border px-3 py-1.5 text-xs font-medium flex items-center justify-between">
         <span>Terminal Output</span>
         {isRunning && (
@@ -29,7 +29,7 @@ const Terminal: React.FC<TerminalProps> = ({ output, isRunning }) => {
         )}
       </div>
       
-      <ScrollArea className="h-[200px] p-3 font-mono text-sm">
+      <ScrollArea className="h-[calc(100%-32px)] p-3 font-mono text-sm">
         {output.length === 0 ? (
           <div className="text-editor-text-muted italic">
             Run your code to see output here...

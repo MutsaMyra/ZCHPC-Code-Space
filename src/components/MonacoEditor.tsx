@@ -15,6 +15,19 @@ const MonacoEditor: React.FC<MonacoEditorProps> = ({ file, language, onChange })
   
   const handleEditorDidMount: OnMount = (editor) => {
     editorRef.current = editor;
+    
+    // Focus the editor
+    editor.focus();
+    
+    // Set up window resize listener for responsiveness
+    const handleResize = () => {
+      editor.layout();
+    };
+    
+    window.addEventListener('resize', handleResize);
+    return () => {
+      window.removeEventListener('resize', handleResize);
+    };
   };
   
   // Map file extension to Monaco language identifier
@@ -180,7 +193,7 @@ public class DemoApplication {
   };
 
   return (
-    <div className="h-full w-full">
+    <div className="h-full w-full flex-1 overflow-hidden">
       <Editor
         height="100%"
         theme="vs-dark"
@@ -199,6 +212,10 @@ public class DemoApplication {
             vertical: 'visible',
             horizontal: 'visible',
           },
+          wordWrap: 'on',
+          wrappingStrategy: 'advanced',
+          formatOnPaste: true,
+          formatOnType: true,
         }}
       />
     </div>
