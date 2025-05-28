@@ -3,11 +3,12 @@ import React, { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import LanguageSelector from './LanguageSelector';
 import { Separator } from '@/components/ui/separator';
-import { Save, Code, Package, Settings, Play, Wifi, WifiOff } from 'lucide-react';
+import { Save, Code, Package, Settings, Play, Wifi, WifiOff, Key } from 'lucide-react';
 import { toast } from 'sonner';
 import DependencyManager from './DependencyManager';
 import { Dialog, DialogContent } from '@/components/ui/dialog';
 import ExecutionSettings, { ExecutionConfig } from './ExecutionSettings';
+import ApiKeySetup from './ApiKeySetup';
 
 interface NavbarProps {
   selectedLanguage: string;
@@ -30,6 +31,7 @@ const Navbar: React.FC<NavbarProps> = ({
 }) => {
   const [isDependencyManagerOpen, setIsDependencyManagerOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [isApiKeySetupOpen, setIsApiKeySetupOpen] = useState(false);
   
   const handleSave = () => {
     if (isOnline) {
@@ -45,6 +47,10 @@ const Navbar: React.FC<NavbarProps> = ({
 
   const toggleDependencyManager = () => {
     setIsDependencyManagerOpen(!isDependencyManagerOpen);
+  };
+
+  const handleApiKeySetup = () => {
+    setIsApiKeySetupOpen(true);
   };
 
   return (
@@ -98,6 +104,16 @@ const Navbar: React.FC<NavbarProps> = ({
           size="sm"
           variant="outline"
           className="bg-editor-sidebar border-editor-border text-editor-text"
+          onClick={handleApiKeySetup}
+        >
+          <Key className="h-4 w-4 mr-2" />
+          API Setup
+        </Button>
+        
+        <Button
+          size="sm"
+          variant="outline"
+          className="bg-editor-sidebar border-editor-border text-editor-text"
           onClick={handleSettings}
         >
           <Settings className="h-4 w-4 mr-2" />
@@ -119,6 +135,11 @@ const Navbar: React.FC<NavbarProps> = ({
         onClose={() => setIsSettingsOpen(false)}
         config={executionConfig}
         onConfigChange={onExecutionConfigChange}
+      />
+      
+      <ApiKeySetup
+        isOpen={isApiKeySetupOpen}
+        onClose={() => setIsApiKeySetupOpen(false)}
       />
     </div>
   );

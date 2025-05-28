@@ -1,4 +1,3 @@
-
 import { toast } from "sonner";
 import { fileSystemService } from "./fileSystemService";
 
@@ -20,6 +19,24 @@ export interface ExecutionResult {
   exitCode: number;
   errors?: string[];
 }
+
+// Judge0 API configuration
+const JUDGE0_API_URL = 'https://judge0-ce.p.rapidapi.com';
+const JUDGE0_API_KEY = 'your-rapidapi-key'; // Users will need to get their own key
+
+// Language ID mappings for Judge0
+const JUDGE0_LANGUAGE_MAP: Record<string, number> = {
+  javascript: 63, // Node.js
+  python: 71,     // Python 3
+  cpp: 54,        // C++ (GCC 9.2.0)
+  java: 62,       // Java (OpenJDK 13.0.1)
+  php: 68,        // PHP (7.4.1)
+  c: 50,          // C (GCC 9.2.0)
+  csharp: 51,     // C# (Mono 6.6.0.161)
+  go: 60,         // Go (1.13.5)
+  rust: 73,       // Rust (1.40.0)
+  ruby: 72,       // Ruby (2.7.0)
+};
 
 export class ExecutionService {
   private static instance: ExecutionService;
@@ -58,79 +75,131 @@ export class ExecutionService {
     language: string, 
     config: ExecutionConfig
   ): Promise<ExecutionResult> {
-    // Determine execution mode based on config and connectivity
     const effectiveMode = config.autoDetect 
       ? this.getRecommendedMode() 
       : config.mode;
     
-    // Force offline mode if not connected, regardless of settings
     if (!this.isOnline && effectiveMode === 'online') {
       toast.warning('No internet connection. Falling back to offline execution.');
       return this.executeLocally(code, language, config);
     }
     
     if (effectiveMode === 'online') {
-      return this.executeOnRemoteServer(code, language, config);
+      return this.executeOnJudge0(code, language, config);
     } else {
       return this.executeLocally(code, language, config);
     }
   }
   
-  private async executeOnRemoteServer(
+  private async executeOnJudge0(
     code: string, 
     language: string, 
     config: ExecutionConfig
   ): Promise<ExecutionResult> {
-    // This would be a real API call in production
-    console.log("Executing on remote server", { code, language, config });
+    const startTime = performance.now();
     
-    // Simulate network delay and processing
-    await new Promise(resolve => setTimeout(resolve, 1500));
-    
-    // Mock result based on language
-    const output: string[] = [
-      `[Server] Executing ${language} code on ${config.hardware.toUpperCase()}...`,
-      `[Server] Allocated ${config.hardware === 'cpu' ? `${config.cpuCores} cores` : `${config.gpuMemory}GB GPU memory`}`,
-    ];
-    
-    // Add some sample output based on the language
-    switch (language) {
-      case 'javascript':
-        output.push('[Server] Node.js environment detected');
-        output.push('Hello from the server!');
-        if (code.includes('console.log')) {
-          const logMatches = code.match(/console\.log\(['"]?(.*?)['"]?\)/g);
-          if (logMatches) {
-            logMatches.forEach(match => {
-              const content = match.match(/console\.log\(['"]?(.*?)['"]?\)/)?.[1] || '';
-              output.push(`> ${content}`);
-            });
-          }
-        }
-        break;
-      case 'python':
-        output.push('[Server] Python interpreter started');
-        output.push('>>> Running script');
-        if (code.includes('print')) {
-          const printMatches = code.match(/print\(['"]?(.*?)['"]?\)/g);
-          if (printMatches) {
-            printMatches.forEach(match => {
-              const content = match.match(/print\(['"]?(.*?)['"]?\)/)?.[1] || '';
-              output.push(`> ${content}`);
-            });
-          }
-        }
-        break;
-      default:
-        output.push(`[Server] Executing ${language} code`);
-        output.push('Execution complete');
+    // Check if API key is configured
+    if (JUDGE0_API_KEY === 'your-rapidapi-key') {
+      toast.error('Judge0 API key not configured. Using local simulation.');
+      return this.executeLocally(code, language, config);
     }
-    
-    return {
-      output,
-      executionTime: Math.random() * 1.5 + 0.5, // Random time between 0.5 and 2s
-      exitCode: 0
-    };
+
+    const languageId = JUDGE0_LANGUAGE_MAP[language];
+    if (!languageId) {
+      throw new Error(`Language ${language} not supported by Judge0`);
+    }
+
+    try {
+      // Submit code for execution
+      const submission = await this.submitToJudge0(code, languageId);
+      
+      // Poll for results
+      const result = await this.pollJudge0Result(submission.token);
+      
+      const executionTime = (performance.now() - startTime) / 1000;
+      
+      const output: string[] = [
+        `[Judge0] Executing ${language} code...`,
+        `[Judge0] Language ID: ${languageId}`,
+      ];
+
+      if (result.stdout) {
+        output.push('--- Output ---');
+        output.push(result.stdout.trim());
+      }
+
+      if (result.stderr) {
+        output.push('--- Errors ---');
+        output.push(result.stderr.trim());
+      }
+
+      if (result.compile_output) {
+        output.push('--- Compilation ---');
+        output.push(result.compile_output.trim());
+      }
+
+      return {
+        output,
+        executionTime: result.time ? parseFloat(result.time) : executionTime,
+        exitCode: result.status?.id === 3 ? 0 : (result.status?.id || 1),
+        errors: result.stderr ? [result.stderr] : undefined
+      };
+
+    } catch (error) {
+      console.error('Judge0 execution error:', error);
+      toast.error('Failed to execute on Judge0. Falling back to local simulation.');
+      return this.executeLocally(code, language, config);
+    }
+  }
+
+  private async submitToJudge0(code: string, languageId: number) {
+    const response = await fetch(`${JUDGE0_API_URL}/submissions?base64_encoded=false&wait=false`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-RapidAPI-Host': 'judge0-ce.p.rapidapi.com',
+        'X-RapidAPI-Key': JUDGE0_API_KEY,
+      },
+      body: JSON.stringify({
+        source_code: code,
+        language_id: languageId,
+        stdin: '',
+      }),
+    });
+
+    if (!response.ok) {
+      throw new Error(`Judge0 submission failed: ${response.statusText}`);
+    }
+
+    return await response.json();
+  }
+
+  private async pollJudge0Result(token: string, maxAttempts: number = 10): Promise<any> {
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+      const response = await fetch(`${JUDGE0_API_URL}/submissions/${token}?base64_encoded=false`, {
+        method: 'GET',
+        headers: {
+          'X-RapidAPI-Host': 'judge0-ce.p.rapidapi.com',
+          'X-RapidAPI-Key': JUDGE0_API_KEY,
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error(`Judge0 polling failed: ${response.statusText}`);
+      }
+
+      const result = await response.json();
+
+      // Status 1 = In Queue, Status 2 = Processing
+      if (result.status?.id > 2) {
+        return result;
+      }
+
+      // Wait before next poll
+      await new Promise(resolve => setTimeout(resolve, 1000));
+    }
+
+    throw new Error('Judge0 execution timeout');
   }
   
   private async executeLocally(
@@ -140,14 +209,12 @@ export class ExecutionService {
   ): Promise<ExecutionResult> {
     console.log("Executing locally", { code, language, config });
     
-    // Start with basic info about execution environment
     const output: string[] = [
       `[Local] Executing ${language} code on ${config.hardware.toUpperCase()}...`,
       `[Local] Using ${navigator.hardwareConcurrency || config.cpuCores} available CPU cores`,
-      `[Local] Browser: ${navigator.userAgent}`,
+      `[Local] Browser: ${navigator.userAgent.split(' ')[0]}`,
     ];
     
-    // Simulate brief processing delay
     await new Promise(resolve => setTimeout(resolve, 400));
     
     try {
@@ -227,7 +294,6 @@ export class ExecutionService {
     };
     
     try {
-      // This is just for demo - in a real app you'd use a safer execution environment
       const wrappedCode = `
         return (function() { 
           ${code}
@@ -261,7 +327,6 @@ export class ExecutionService {
   }
   
   private simulatePythonExecution(code: string, output: string[]): ExecutionResult {
-    // Extract print statements from Python code
     const printRegex = /print\s*\(\s*(?:f?['"]([^'"]*)['"]\s*|([^)]*))(?:\s*,\s*([^)]*))*\s*\)/g;
     let match;
     let found = false;
@@ -269,10 +334,8 @@ export class ExecutionService {
     while ((match = printRegex.exec(code)) !== null) {
       found = true;
       if (match[1]) {
-        // Handle string literals
         output.push(`> ${match[1]}`);
       } else if (match[2]) {
-        // Handle variables, simple expressions
         output.push(`> [Variable output: "${match[2]}"]`);
       }
     }
@@ -281,7 +344,6 @@ export class ExecutionService {
       output.push(`> [No output. Use print() to see output]`);
     }
     
-    // Add some basic syntax detection
     if (code.includes('import ')) {
       output.push('> [Modules imported successfully]');
     }
@@ -302,7 +364,6 @@ export class ExecutionService {
   }
   
   private simulateCppExecution(code: string, output: string[]): ExecutionResult {
-    // Extract cout statements from C++ code
     const coutRegex = /cout\s*<<\s*["\']?([^"\'<;]*)["\']?/g;
     let match;
     let found = false;
@@ -316,7 +377,6 @@ export class ExecutionService {
       output.push(`> [No output. Use cout << "text" to see output]`);
     }
     
-    // Add some basic syntax detection
     if (code.includes('#include')) {
       output.push('> [Headers included successfully]');
     }
@@ -333,7 +393,6 @@ export class ExecutionService {
   }
   
   private simulateJavaExecution(code: string, output: string[]): ExecutionResult {
-    // Extract System.out.println statements from Java code
     const printlnRegex = /System\.out\.println\s*\(\s*["\']([^"\']*)["\']?\s*\)/g;
     let match;
     let found = false;
@@ -347,7 +406,6 @@ export class ExecutionService {
       output.push(`> [No output. Use System.out.println("text") to see output]`);
     }
     
-    // Add some basic syntax detection
     if (code.includes('public class')) {
       output.push('> [Class compiled successfully]');
     }
@@ -364,7 +422,6 @@ export class ExecutionService {
   }
   
   private simulatePhpExecution(code: string, output: string[]): ExecutionResult {
-    // Extract echo statements from PHP code
     const echoRegex = /echo\s+["\']([^"\']*)["\']?\s*;/g;
     let match;
     let found = false;
@@ -378,7 +435,6 @@ export class ExecutionService {
       output.push(`> [No output. Use echo "text"; to see output]`);
     }
     
-    // Add some basic syntax detection
     if (code.includes('<?php')) {
       output.push('> [PHP script processed]');
     }
