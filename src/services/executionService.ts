@@ -22,7 +22,6 @@ export interface ExecutionResult {
 
 // Judge0 API configuration
 const JUDGE0_API_URL = 'https://judge0-ce.p.rapidapi.com';
-const JUDGE0_API_KEY = 'your-rapidapi-key'; // Users will need to get their own key
 
 // Language ID mappings for Judge0
 const JUDGE0_LANGUAGE_MAP: Record<string, number> = {
@@ -69,6 +68,10 @@ export class ExecutionService {
   public getConnectionStatus(): boolean {
     return this.isOnline;
   }
+
+  private getApiKey(): string | null {
+    return localStorage.getItem('judge0_api_key');
+  }
   
   public async executeCode(
     code: string, 
@@ -79,13 +82,20 @@ export class ExecutionService {
       ? this.getRecommendedMode() 
       : config.mode;
     
+    console.log(`Execution mode: ${effectiveMode}, Online: ${this.isOnline}`);
+    
     if (!this.isOnline && effectiveMode === 'online') {
       toast.warning('No internet connection. Falling back to offline execution.');
       return this.executeLocally(code, language, config);
     }
     
     if (effectiveMode === 'online') {
-      return this.executeOnJudge0(code, language, config);
+      const apiKey = this.getApiKey();
+      if (!apiKey) {
+        toast.warning('Judge0 API key not configured. Using local simulation. Click "API Setup" to configure.');
+        return this.executeLocally(code, language, config);
+      }
+      return this.executeOnJudge0(code, language, config, apiKey);
     } else {
       return this.executeLocally(code, language, config);
     }
@@ -94,33 +104,34 @@ export class ExecutionService {
   private async executeOnJudge0(
     code: string, 
     language: string, 
-    config: ExecutionConfig
+    config: ExecutionConfig,
+    apiKey: string
   ): Promise<ExecutionResult> {
     const startTime = performance.now();
     
-    // Check if API key is configured
-    if (JUDGE0_API_KEY === 'your-rapidapi-key') {
-      toast.error('Judge0 API key not configured. Using local simulation.');
-      return this.executeLocally(code, language, config);
-    }
+    console.log(`Executing on Judge0 with language: ${language}`);
 
     const languageId = JUDGE0_LANGUAGE_MAP[language];
     if (!languageId) {
-      throw new Error(`Language ${language} not supported by Judge0`);
+      toast.error(`Language ${language} not supported by Judge0. Using local simulation.`);
+      return this.executeLocally(code, language, config);
     }
 
     try {
       // Submit code for execution
-      const submission = await this.submitToJudge0(code, languageId);
+      const submission = await this.submitToJudge0(code, languageId, apiKey);
+      console.log('Submission created:', submission);
       
       // Poll for results
-      const result = await this.pollJudge0Result(submission.token);
+      const result = await this.pollJudge0Result(submission.token, apiKey);
+      console.log('Execution result:', result);
       
       const executionTime = (performance.now() - startTime) / 1000;
       
       const output: string[] = [
         `[Judge0] Executing ${language} code...`,
         `[Judge0] Language ID: ${languageId}`,
+        `[Judge0] Submission ID: ${submission.token}`,
       ];
 
       if (result.stdout) {
@@ -138,6 +149,9 @@ export class ExecutionService {
         output.push(result.compile_output.trim());
       }
 
+      const statusDescription = this.getStatusDescription(result.status?.id);
+      output.push(`[Judge0] Status: ${statusDescription}`);
+
       return {
         output,
         executionTime: result.time ? parseFloat(result.time) : executionTime,
@@ -152,13 +166,35 @@ export class ExecutionService {
     }
   }
 
-  private async submitToJudge0(code: string, languageId: number) {
+  private getStatusDescription(statusId?: number): string {
+    const statusMap: Record<number, string> = {
+      1: 'In Queue',
+      2: 'Processing',
+      3: 'Accepted',
+      4: 'Wrong Answer',
+      5: 'Time Limit Exceeded',
+      6: 'Compilation Error',
+      7: 'Runtime Error (SIGSEGV)',
+      8: 'Runtime Error (SIGXFSZ)',
+      9: 'Runtime Error (SIGFPE)',
+      10: 'Runtime Error (SIGABRT)',
+      11: 'Runtime Error (NZEC)',
+      12: 'Runtime Error (Other)',
+      13: 'Internal Error',
+      14: 'Exec Format Error'
+    };
+    return statusMap[statusId || 0] || 'Unknown';
+  }
+
+  private async submitToJudge0(code: string, languageId: number, apiKey: string) {
+    console.log('Submitting to Judge0...', { languageId, codeLength: code.length });
+    
     const response = await fetch(`${JUDGE0_API_URL}/submissions?base64_encoded=false&wait=false`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'X-RapidAPI-Host': 'judge0-ce.p.rapidapi.com',
-        'X-RapidAPI-Key': JUDGE0_API_KEY,
+        'X-RapidAPI-Key': apiKey,
       },
       body: JSON.stringify({
         source_code: code,
@@ -168,27 +204,30 @@ export class ExecutionService {
     });
 
     if (!response.ok) {
-      throw new Error(`Judge0 submission failed: ${response.statusText}`);
+      throw new Error(`Judge0 submission failed: ${response.status} ${response.statusText}`);
     }
 
     return await response.json();
   }
 
-  private async pollJudge0Result(token: string, maxAttempts: number = 10): Promise<any> {
+  private async pollJudge0Result(token: string, apiKey: string, maxAttempts: number = 10): Promise<any> {
+    console.log('Polling Judge0 result...', { token, maxAttempts });
+    
     for (let attempt = 0; attempt < maxAttempts; attempt++) {
       const response = await fetch(`${JUDGE0_API_URL}/submissions/${token}?base64_encoded=false`, {
         method: 'GET',
         headers: {
           'X-RapidAPI-Host': 'judge0-ce.p.rapidapi.com',
-          'X-RapidAPI-Key': JUDGE0_API_KEY,
+          'X-RapidAPI-Key': apiKey,
         },
       });
 
       if (!response.ok) {
-        throw new Error(`Judge0 polling failed: ${response.statusText}`);
+        throw new Error(`Judge0 polling failed: ${response.status} ${response.statusText}`);
       }
 
       const result = await response.json();
+      console.log(`Poll attempt ${attempt + 1}:`, result.status);
 
       // Status 1 = In Queue, Status 2 = Processing
       if (result.status?.id > 2) {
@@ -207,7 +246,7 @@ export class ExecutionService {
     language: string, 
     config: ExecutionConfig
   ): Promise<ExecutionResult> {
-    console.log("Executing locally", { code, language, config });
+    console.log("Executing locally", { code: code.substring(0, 100) + '...', language, config });
     
     const output: string[] = [
       `[Local] Executing ${language} code on ${config.hardware.toUpperCase()}...`,
@@ -215,7 +254,8 @@ export class ExecutionService {
       `[Local] Browser: ${navigator.userAgent.split(' ')[0]}`,
     ];
     
-    await new Promise(resolve => setTimeout(resolve, 400));
+    // Add a small delay to simulate processing
+    await new Promise(resolve => setTimeout(resolve, 800));
     
     try {
       switch (language) {
@@ -262,7 +302,7 @@ export class ExecutionService {
   
   private executeJavaScript(code: string, output: string[]): ExecutionResult {
     const startTime = performance.now();
-    const console = {
+    const mockConsole = {
       log: (...args: any[]) => {
         const message = args.map(arg => 
           typeof arg === 'object' ? JSON.stringify(arg, null, 2) : String(arg)
@@ -300,7 +340,7 @@ export class ExecutionService {
         })();
       `;
       
-      const result = new Function('console', wrappedCode)(console);
+      const result = new Function('console', wrappedCode)(mockConsole);
       
       if (result !== undefined && typeof result !== 'function') {
         output.push(`Return value: ${typeof result === 'object' ? JSON.stringify(result, null, 2) : result}`);
