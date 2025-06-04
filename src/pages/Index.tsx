@@ -1,12 +1,14 @@
 
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import Navbar from '../components/Navbar';
 import { FileNode } from '../components/FileExplorer';
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable";
-import { languages } from '../components/LanguageSelector';
 import { executionService, ExecutionConfig } from '../services/executionService';
-import { fileSystemService } from '../services/fileSystemService';
+import { projectManager } from '../services/projectManager';
 import { useCodeExecution } from '../hooks/useCodeExecution';
+import { useAutoSave } from '../hooks/useAutoSave';
+import { toast } from 'sonner';
 
 // Import the refactored components
 import FileExplorerPanel from '../components/FileExplorerPanel';
@@ -14,11 +16,13 @@ import EditorPanel from '../components/EditorPanel';
 import TerminalPanel from '../components/TerminalPanel';
 
 const Index = () => {
+  const navigate = useNavigate();
   const [selectedLanguage, setSelectedLanguage] = useState('javascript');
   const [files, setFiles] = useState<FileNode[]>([]);
   const [selectedFile, setSelectedFile] = useState<FileNode | null>(null);
   const [editorContent, setEditorContent] = useState<string>('');
   const [isOnline, setIsOnline] = useState(navigator.onLine);
+  const [currentProjectId, setCurrentProjectId] = useState<string | null>(null);
   const [executionConfig, setExecutionConfig] = useState<ExecutionConfig>({
     mode: navigator.onLine ? 'online' : 'offline',
     hardware: 'cpu',
@@ -35,6 +39,45 @@ const Index = () => {
     runCode,
     clearTerminal
   } = useCodeExecution();
+
+  // Auto-save functionality
+  const { forceSave } = useAutoSave(files, currentProjectId, {
+    enabled: true,
+    delay: 2000,
+  });
+  
+  // Check if user has a current project, otherwise redirect to landing
+  useEffect(() => {
+    const currentProject = projectManager.getCurrentProject();
+    if (!currentProject) {
+      navigate('/');
+      return;
+    }
+    
+    setCurrentProjectId(currentProject.metadata.id);
+    setFiles(currentProject.files);
+    setSelectedLanguage(currentProject.metadata.language);
+    
+    // Select first file if available
+    const firstFile = findFirstFile(currentProject.files);
+    if (firstFile) {
+      setSelectedFile(firstFile);
+      setEditorContent(firstFile.content || '');
+    }
+  }, [navigate]);
+
+  // Helper function to find first file in the project
+  const findFirstFile = (fileNodes: FileNode[]): FileNode | null => {
+    for (const node of fileNodes) {
+      if (node.type === 'file') {
+        return node;
+      } else if (node.children) {
+        const found = findFirstFile(node.children);
+        if (found) return found;
+      }
+    }
+    return null;
+  };
   
   // Update online status when connection changes
   useEffect(() => {
@@ -49,16 +92,6 @@ const Index = () => {
       window.removeEventListener('offline', handleOffline);
     };
   }, []);
-  
-  // Load files based on connection status
-  useEffect(() => {
-    setFiles(fileSystemService.getFiles());
-  }, [isOnline]);
-  
-  useEffect(() => {
-    // Reset selected file when changing language
-    setSelectedFile(null);
-  }, [selectedLanguage]);
   
   useEffect(() => {
     // Update execution mode based on connectivity when auto-detect is enabled
@@ -107,12 +140,32 @@ const Index = () => {
     runCode(selectedFile, selectedLanguage, executionConfig, isOnline);
   };
 
+  const handleSave = () => {
+    forceSave();
+    toast.success('Project saved successfully');
+  };
+
+  // If no project is loaded, show loading or redirect
+  if (!currentProjectId) {
+    return (
+      <div className="flex items-center justify-center h-screen bg-editor text-editor-text">
+        <div className="text-center">
+          <div className="text-lg">Loading project...</div>
+          <div className="text-sm text-editor-text-muted mt-2">
+            If this persists, you may need to create or select a project.
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="flex flex-col h-screen bg-editor text-editor-text">
       <Navbar 
         selectedLanguage={selectedLanguage} 
         onLanguageChange={setSelectedLanguage} 
         onRunCode={handleRunCode}
+        onSave={handleSave}
         isRunning={isRunning}
         executionConfig={executionConfig}
         onExecutionConfigChange={setExecutionConfig}
