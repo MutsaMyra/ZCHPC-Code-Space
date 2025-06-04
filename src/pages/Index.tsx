@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Navbar from '../components/Navbar';
@@ -140,6 +139,31 @@ const Index = () => {
     runCode(selectedFile, selectedLanguage, executionConfig, isOnline);
   };
 
+  const handleRunCodeCell = async (code: string) => {
+    if (!code.trim()) return;
+    
+    // TODO: Implement cell-specific execution
+    // This will need to be enhanced to support:
+    // 1. Maintaining kernel state between cell executions
+    // 2. Variable persistence across cells
+    // 3. Proper output capturing and display
+    
+    // For now, use the existing execution service
+    return new Promise<void>((resolve, reject) => {
+      // Create a temporary file node for the cell code
+      const tempFile: FileNode = {
+        id: 'temp-cell',
+        name: 'temp.py',
+        type: 'file',
+        content: code
+      };
+      
+      runCode(tempFile, selectedLanguage, executionConfig, isOnline)
+        .then(() => resolve())
+        .catch(() => reject(new Error('Cell execution failed')));
+    });
+  };
+
   const handleSave = () => {
     forceSave();
     toast.success('Project saved successfully');
@@ -192,6 +216,8 @@ const Index = () => {
                 selectedFile={selectedFile}
                 selectedLanguage={selectedLanguage}
                 onEditorChange={handleEditorChange}
+                onRunCode={handleRunCodeCell}
+                isOnline={isOnline}
               />
             </ResizablePanel>
             
