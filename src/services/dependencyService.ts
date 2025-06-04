@@ -1,4 +1,3 @@
-
 import { toast } from 'sonner';
 import { projectManager } from './projectManager';
 
@@ -267,6 +266,10 @@ class DependencyService {
       // Add package to project dependencies
       if (!project.metadata.dependencies.includes(packageName)) {
         project.metadata.dependencies.push(packageName);
+        
+        // Create/update dependency files based on language
+        this.updateDependencyFiles(project, packageName);
+        
         projectManager.updateProjectFiles(projectId, project.files);
         
         toast.success(`${packageName} added to project dependencies`);
@@ -281,6 +284,140 @@ class DependencyService {
     }
   }
 
+  private updateDependencyFiles(project: any, packageName: string): void {
+    const language = project.metadata.language;
+    
+    switch (language) {
+      case 'javascript':
+        this.updatePackageJson(project, packageName);
+        break;
+      case 'python':
+        this.updateRequirementsTxt(project, packageName);
+        break;
+      case 'php':
+        this.updateComposerJson(project, packageName);
+        break;
+      default:
+        // For other languages, just add to dependencies list
+        break;
+    }
+  }
+
+  private updatePackageJson(project: any, packageName: string): void {
+    let packageJsonFile = this.findFileInProject(project.files, 'package.json');
+    
+    if (!packageJsonFile) {
+      // Create package.json if it doesn't exist
+      const newPackageJson = {
+        id: 'package-json',
+        name: 'package.json',
+        type: 'file' as const,
+        extension: '.json',
+        content: JSON.stringify({
+          name: project.metadata.name.toLowerCase().replace(/\s+/g, '-'),
+          version: '1.0.0',
+          dependencies: {
+            [packageName]: 'latest'
+          }
+        }, null, 2),
+        lastModified: new Date()
+      };
+      
+      project.files.push(newPackageJson);
+    } else {
+      // Update existing package.json
+      try {
+        const packageData = JSON.parse(packageJsonFile.content || '{}');
+        if (!packageData.dependencies) {
+          packageData.dependencies = {};
+        }
+        packageData.dependencies[packageName] = 'latest';
+        
+        packageJsonFile.content = JSON.stringify(packageData, null, 2);
+        packageJsonFile.lastModified = new Date();
+      } catch (error) {
+        console.error('Failed to update package.json:', error);
+      }
+    }
+  }
+
+  private updateRequirementsTxt(project: any, packageName: string): void {
+    let requirementsFile = this.findFileInProject(project.files, 'requirements.txt');
+    
+    if (!requirementsFile) {
+      // Create requirements.txt if it doesn't exist
+      const newRequirements = {
+        id: 'requirements-txt',
+        name: 'requirements.txt',
+        type: 'file' as const,
+        extension: '.txt',
+        content: `${packageName}\n`,
+        lastModified: new Date()
+      };
+      
+      project.files.push(newRequirements);
+    } else {
+      // Update existing requirements.txt
+      const currentContent = requirementsFile.content || '';
+      const packages = currentContent.split('\n').filter(line => line.trim());
+      
+      if (!packages.includes(packageName)) {
+        packages.push(packageName);
+        requirementsFile.content = packages.join('\n') + '\n';
+        requirementsFile.lastModified = new Date();
+      }
+    }
+  }
+
+  private updateComposerJson(project: any, packageName: string): void {
+    let composerFile = this.findFileInProject(project.files, 'composer.json');
+    
+    if (!composerFile) {
+      // Create composer.json if it doesn't exist
+      const newComposer = {
+        id: 'composer-json',
+        name: 'composer.json',
+        type: 'file' as const,
+        extension: '.json',
+        content: JSON.stringify({
+          name: project.metadata.name.toLowerCase().replace(/\s+/g, '-'),
+          require: {
+            [packageName]: '^1.0'
+          }
+        }, null, 2),
+        lastModified: new Date()
+      };
+      
+      project.files.push(newComposer);
+    } else {
+      // Update existing composer.json
+      try {
+        const composerData = JSON.parse(composerFile.content || '{}');
+        if (!composerData.require) {
+          composerData.require = {};
+        }
+        composerData.require[packageName] = '^1.0';
+        
+        composerFile.content = JSON.stringify(composerData, null, 2);
+        composerFile.lastModified = new Date();
+      } catch (error) {
+        console.error('Failed to update composer.json:', error);
+      }
+    }
+  }
+
+  private findFileInProject(files: any[], fileName: string): any {
+    for (const file of files) {
+      if (file.type === 'file' && file.name === fileName) {
+        return file;
+      } else if (file.type === 'folder' && file.children) {
+        const found = this.findFileInProject(file.children, fileName);
+        if (found) return found;
+      }
+    }
+    return null;
+  }
+
   public removePackage(packageName: string, projectId: string): boolean {
     try {
       const project = projectManager.getProject(projectId);
@@ -290,6 +427,10 @@ class DependencyService {
       }
 
       project.metadata.dependencies = project.metadata.dependencies.filter(dep => dep !== packageName);
+      
+      // Remove from dependency files
+      this.removeFromDependencyFiles(project, packageName);
+      
       projectManager.updateProjectFiles(projectId, project.files);
       
       toast.success(`${packageName} removed from project`);
@@ -297,6 +438,64 @@ class DependencyService {
     } catch (error) {
       console.error('Failed to remove package:', error);
       return false;
+    }
+  }
+
+  private removeFromDependencyFiles(project: any, packageName: string): void {
+    const language = project.metadata.language;
+    
+    switch (language) {
+      case 'javascript':
+        this.removeFromPackageJson(project, packageName);
+        break;
+      case 'python':
+        this.removeFromRequirementsTxt(project, packageName);
+        break;
+      case 'php':
+        this.removeFromComposerJson(project, packageName);
+        break;
+    }
+  }
+
+  private removeFromPackageJson(project: any, packageName: string): void {
+    const packageJsonFile = this.findFileInProject(project.files, 'package.json');
+    if (packageJsonFile) {
+      try {
+        const packageData = JSON.parse(packageJsonFile.content || '{}');
+        if (packageData.dependencies) {
+          delete packageData.dependencies[packageName];
+        }
+        packageJsonFile.content = JSON.stringify(packageData, null, 2);
+        packageJsonFile.lastModified = new Date();
+      } catch (error) {
+        console.error('Failed to update package.json:', error);
+      }
+    }
+  }
+
+  private removeFromRequirementsTxt(project: any, packageName: string): void {
+    const requirementsFile = this.findFileInProject(project.files, 'requirements.txt');
+    if (requirementsFile) {
+      const currentContent = requirementsFile.content || '';
+      const packages = currentContent.split('\n').filter(line => line.trim() && line.trim() !== packageName);
+      requirementsFile.content = packages.join('\n') + (packages.length > 0 ? '\n' : '');
+      requirementsFile.lastModified = new Date();
+    }
+  }
+
+  private removeFromComposerJson(project: any, packageName: string): void {
+    const composerFile = this.findFileInProject(project.files, 'composer.json');
+    if (composerFile) {
+      try {
+        const composerData = JSON.parse(composerFile.content || '{}');
+        if (composerData.require) {
+          delete composerData.require[packageName];
+        }
+        composerFile.content = JSON.stringify(composerData, null, 2);
+        composerFile.lastModified = new Date();
+      } catch (error) {
+        console.error('Failed to update composer.json:', error);
+      }
     }
   }
 

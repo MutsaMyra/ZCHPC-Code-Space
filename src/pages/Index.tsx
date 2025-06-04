@@ -107,6 +107,14 @@ const Index = () => {
     setSelectedFile(file);
     setEditorContent(file.content || '');
   };
+
+  const handleFilesChange = (newFiles: FileNode[]) => {
+    setFiles(newFiles);
+    // Update project with new files
+    if (currentProjectId) {
+      projectManager.updateProjectFiles(currentProjectId, newFiles);
+    }
+  };
   
   const handleEditorChange = (value: string | undefined) => {
     if (value !== undefined && selectedFile) {
@@ -205,6 +213,7 @@ const Index = () => {
                 files={files}
                 selectedFile={selectedFile}
                 onFileSelect={handleFileSelect}
+                onFilesChange={handleFilesChange}
                 selectedLanguage={selectedLanguage}
                 isOnline={isOnline}
               />
