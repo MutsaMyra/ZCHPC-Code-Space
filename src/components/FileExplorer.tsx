@@ -10,6 +10,7 @@ export interface FileNode {
   extension?: string;
   children?: FileNode[];
   content?: string;
+  lastModified?: Date;
 }
 
 interface FileExplorerProps {
