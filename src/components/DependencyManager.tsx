@@ -1,50 +1,13 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Package, PackagePlus, PackageSearch } from "lucide-react";
+import { Package, PackagePlus, PackageSearch, Download, Wifi, WifiOff } from "lucide-react";
 import { toast } from 'sonner';
 import { languages } from './LanguageSelector';
-
-// Mock package database for demo purposes
-const mockPackages: Record<string, any[]> = {
-  javascript: [
-    { name: 'react-router', description: 'Declarative routing for React', version: '6.18.0', popularity: 'High' },
-    { name: 'axios', description: 'Promise based HTTP client', version: '1.5.0', popularity: 'High' },
-    { name: 'lodash', description: 'Modern JavaScript utility library', version: '4.17.21', popularity: 'High' },
-    { name: 'formik', description: 'Forms in React, made easy', version: '2.4.5', popularity: 'Medium' },
-    { name: 'zustand', description: 'Small, fast state-management', version: '4.4.1', popularity: 'Medium' },
-  ],
-  python: [
-    { name: 'pandas', description: 'Data analysis library', version: '2.1.1', popularity: 'High' },
-    { name: 'numpy', description: 'Scientific computing library', version: '1.26.0', popularity: 'High' },
-    { name: 'matplotlib', description: 'Visualization library', version: '3.8.0', popularity: 'High' },
-    { name: 'scikit-learn', description: 'Machine learning library', version: '1.3.1', popularity: 'Medium' },
-    { name: 'requests', description: 'HTTP library', version: '2.31.0', popularity: 'High' },
-  ],
-  php: [
-    { name: 'guzzlehttp/guzzle', description: 'HTTP client', version: '7.8.0', popularity: 'High' },
-    { name: 'symfony/console', description: 'Console component', version: '6.3.4', popularity: 'High' },
-    { name: 'phpunit/phpunit', description: 'Testing framework', version: '10.4.1', popularity: 'High' },
-    { name: 'laravel/sanctum', description: 'API authentication', version: '3.3.1', popularity: 'Medium' },
-    { name: 'doctrine/orm', description: 'Object-relational mapper', version: '2.16.1', popularity: 'Medium' },
-  ],
-  cpp: [
-    { name: 'boost', description: 'Collection of C++ libraries', version: '1.83.0', popularity: 'High' },
-    { name: 'eigen', description: 'C++ template library for linear algebra', version: '3.4.0', popularity: 'Medium' },
-    { name: 'fmt', description: 'A modern formatting library', version: '10.1.1', popularity: 'Medium' },
-    { name: 'nlohmann/json', description: 'JSON for Modern C++', version: '3.11.3', popularity: 'High' },
-    { name: 'catch2', description: 'Testing framework', version: '3.4.0', popularity: 'High' },
-  ],
-  java: [
-    { name: 'spring-boot-starter', description: 'Spring Boot core', version: '3.1.5', popularity: 'High' },
-    { name: 'lombok', description: 'Automatic resource management', version: '1.18.30', popularity: 'High' },
-    { name: 'junit-jupiter', description: 'Testing framework', version: '5.10.0', popularity: 'High' },
-    { name: 'hibernate-core', description: 'ORM framework', version: '6.3.1', popularity: 'Medium' },
-    { name: 'jackson-databind', description: 'JSON parser', version: '2.15.3', popularity: 'High' },
-  ],
-};
+import { dependencyService, PackageInfo } from '../services/dependencyService';
+import { projectManager } from '../services/projectManager';
 
 interface DependencyManagerProps {
   selectedLanguage: string;
@@ -53,50 +16,126 @@ interface DependencyManagerProps {
 
 const DependencyManager: React.FC<DependencyManagerProps> = ({ selectedLanguage, onClose }) => {
   const [searchTerm, setSearchTerm] = useState('');
+  const [packages, setPackages] = useState<PackageInfo[]>([]);
   const [installedPackages, setInstalledPackages] = useState<string[]>([]);
+  const [isSearching, setIsSearching] = useState(false);
+  const [isOnline, setIsOnline] = useState(navigator.onLine);
   
   const currentLanguage = languages.find(lang => lang.id === selectedLanguage);
   const frameworkName = currentLanguage?.framework || '';
+  const currentProject = projectManager.getCurrentProject();
   
-  const handleSearch = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setSearchTerm(e.target.value);
+  useEffect(() => {
+    // Load installed packages
+    if (currentProject) {
+      setInstalledPackages(dependencyService.getInstalledPackages(currentProject.metadata.id));
+    }
+    
+    // Load initial packages
+    handleSearch('');
+  }, [currentProject]);
+
+  useEffect(() => {
+    const handleOnline = () => setIsOnline(true);
+    const handleOffline = () => setIsOnline(false);
+    
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+    
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, []);
+  
+  const handleSearch = async (query: string) => {
+    setIsSearching(true);
+    try {
+      const results = await dependencyService.searchPackages(query, selectedLanguage);
+      setPackages(results);
+    } catch (error) {
+      console.error('Search failed:', error);
+      toast.error('Failed to search packages');
+    } finally {
+      setIsSearching(false);
+    }
+  };
+
+  const handleSearchInput = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+    setSearchTerm(value);
+    
+    // Debounce search
+    const timeoutId = setTimeout(() => {
+      handleSearch(value);
+    }, 300);
+    
+    return () => clearTimeout(timeoutId);
   };
   
-  const filteredPackages = mockPackages[selectedLanguage]?.filter(pkg => 
-    pkg.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    pkg.description.toLowerCase().includes(searchTerm.toLowerCase())
-  ) || [];
-  
-  const handleInstall = (packageName: string) => {
-    if (!installedPackages.includes(packageName)) {
-      setInstalledPackages([...installedPackages, packageName]);
-      toast.success(`Installed ${packageName} successfully!`, {
-        description: "Package added to your project"
-      });
-    } else {
+  const handleInstall = async (packageName: string) => {
+    if (!currentProject) {
+      toast.error('No project selected');
+      return;
+    }
+
+    if (installedPackages.includes(packageName)) {
       toast.info(`${packageName} is already installed.`);
+      return;
+    }
+
+    const success = await dependencyService.installPackage(
+      packageName, 
+      selectedLanguage, 
+      currentProject.metadata.id
+    );
+
+    if (success) {
+      setInstalledPackages([...installedPackages, packageName]);
     }
   };
   
   const handleUninstall = (packageName: string) => {
-    setInstalledPackages(installedPackages.filter(pkg => pkg !== packageName));
-    toast.success(`Uninstalled ${packageName} successfully!`, {
-      description: "Package removed from your project"
-    });
+    if (!currentProject) {
+      toast.error('No project selected');
+      return;
+    }
+
+    const success = dependencyService.removePackage(packageName, currentProject.metadata.id);
+    
+    if (success) {
+      setInstalledPackages(installedPackages.filter(pkg => pkg !== packageName));
+    }
   };
 
   return (
-    <Card className="w-full max-w-3xl bg-editor-sidebar border-editor-border text-editor-text">
+    <Card className="w-full max-w-4xl bg-editor-sidebar border-editor-border text-editor-text">
       <CardHeader>
-        <CardTitle className="flex items-center">
-          <Package className="mr-2 h-5 w-5" />
-          Dependency Manager
-          <span className="ml-2 text-sm font-normal text-editor-text-muted">
-            ({frameworkName})
-          </span>
+        <CardTitle className="flex items-center justify-between">
+          <div className="flex items-center">
+            <Package className="mr-2 h-5 w-5" />
+            Dependency Manager
+            <span className="ml-2 text-sm font-normal text-editor-text-muted">
+              ({frameworkName})
+            </span>
+          </div>
+          <div className="flex items-center space-x-2">
+            {isOnline ? (
+              <div className="flex items-center text-green-400 text-xs">
+                <Wifi className="h-4 w-4 mr-1" />
+                Online Search
+              </div>
+            ) : (
+              <div className="flex items-center text-yellow-400 text-xs">
+                <WifiOff className="h-4 w-4 mr-1" />
+                Cached Only
+              </div>
+            )}
+          </div>
         </CardTitle>
         <CardDescription className="text-editor-text-muted">
           Search and install packages for your {currentLanguage?.name} project
+          {!isOnline && ' (offline mode - showing cached packages only)'}
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -104,47 +143,82 @@ const DependencyManager: React.FC<DependencyManagerProps> = ({ selectedLanguage,
           <div className="flex items-center mb-2 space-x-2">
             <PackageSearch className="h-5 w-5 text-editor-text-muted" />
             <Input 
-              placeholder="Search packages..." 
+              placeholder={isOnline ? "Search packages from web..." : "Search cached packages..."} 
               value={searchTerm}
-              onChange={handleSearch}
+              onChange={handleSearchInput}
               className="bg-editor-input border-editor-border text-editor-text"
             />
+            {isSearching && (
+              <div className="text-xs text-editor-text-muted">Searching...</div>
+            )}
           </div>
         </div>
         
         <div>
-          <h3 className="text-sm font-medium mb-2">Available Packages</h3>
+          <h3 className="text-sm font-medium mb-2 flex items-center">
+            Available Packages
+            {!isOnline && (
+              <span className="ml-2 text-xs bg-yellow-600 px-2 py-1 rounded">
+                Offline Cache
+              </span>
+            )}
+          </h3>
           <div className="space-y-2 max-h-60 overflow-y-auto">
-            {filteredPackages.length > 0 ? (
-              filteredPackages.map((pkg) => (
+            {packages.length > 0 ? (
+              packages.map((pkg) => (
                 <div 
                   key={pkg.name} 
-                  className="flex items-center justify-between p-2 rounded-md bg-editor hover:bg-editor-highlight"
+                  className="flex items-center justify-between p-3 rounded-md bg-editor hover:bg-editor-highlight border border-editor-border"
                 >
-                  <div>
-                    <div className="font-medium">{pkg.name}</div>
+                  <div className="flex-1">
+                    <div className="font-medium flex items-center">
+                      {pkg.name}
+                      {pkg.homepage && isOnline && (
+                        <a 
+                          href={pkg.homepage} 
+                          target="_blank" 
+                          rel="noopener noreferrer"
+                          className="ml-2 text-xs text-blue-400 hover:underline"
+                        >
+                          Homepage
+                        </a>
+                      )}
+                    </div>
                     <div className="text-xs text-editor-text-muted">{pkg.description}</div>
-                    <div className="text-xs text-editor-text-muted">v{pkg.version} · Popularity: {pkg.popularity}</div>
+                    <div className="text-xs text-editor-text-muted">
+                      v{pkg.version} · Popularity: {pkg.popularity}
+                      {pkg.downloads && ` · Downloads: ${pkg.downloads}`}
+                    </div>
+                    {pkg.keywords && (
+                      <div className="text-xs text-editor-text-muted mt-1">
+                        Tags: {pkg.keywords.slice(0, 3).join(', ')}
+                      </div>
+                    )}
                   </div>
-                  <Button 
-                    size="sm"
-                    variant={installedPackages.includes(pkg.name) ? "outline" : "default"}
-                    onClick={() => installedPackages.includes(pkg.name) 
-                      ? handleUninstall(pkg.name) 
-                      : handleInstall(pkg.name)
-                    }
-                    className={installedPackages.includes(pkg.name) 
-                      ? "bg-editor-sidebar border-editor-border text-editor-text" 
-                      : "bg-editor-active"
-                    }
-                  >
-                    {installedPackages.includes(pkg.name) ? "Uninstall" : "Install"}
-                  </Button>
+                  <div className="flex items-center space-x-2">
+                    {isOnline && !installedPackages.includes(pkg.name) && (
+                      <Download className="h-4 w-4 text-blue-400" />
+                    )}
+                    <Button 
+                      size="sm"
+                      variant={installedPackages.includes(pkg.name) ? "outline" : "default"}
+                      onClick={() => installedPackages.includes(pkg.name) 
+                        ? handleUninstall(pkg.name) 
+                        : handleInstall(pkg.name)
+                      }
+                      className={installedPackages.includes(pkg.name) 
+                        ? "bg-editor-sidebar border-editor-border text-editor-text" 
+                        : "bg-editor-active"
+                      }
+                    >
+                      {installedPackages.includes(pkg.name) ? "Uninstall" : "Install"}
+                    </Button>
+                  </div>
                 </div>
               ))
             ) : (
               <div className="text-center py-4 text-editor-text-muted">
-                No packages found matching "{searchTerm}"
+                {isSearching ? 'Searching...' : `No packages found${searchTerm ? ` matching "${searchTerm}"` : ''}`}
               </div>
             )}
           </div>
@@ -152,19 +226,37 @@ const DependencyManager: React.FC<DependencyManagerProps> = ({ selectedLanguage,
 
         {installedPackages.length > 0 && (
           <div className="mt-4">
-            <h3 className="text-sm font-medium mb-2">Installed Packages</h3>
-            <div className="p-2 rounded-md bg-editor-highlight">
-              {installedPackages.map(pkg => (
-                <div key={pkg} className="flex items-center text-sm py-1">
-                  <PackagePlus className="h-4 w-4 mr-2 text-green-400" />
-                  {pkg}
-                </div>
-              ))}
+            <h3 className="text-sm font-medium mb-2">Installed Packages ({installedPackages.length})</h3>
+            <div className="p-3 rounded-md bg-editor-highlight border border-editor-border">
+              <div className="grid grid-cols-2 gap-2">
+                {installedPackages.map(pkg => (
+                  <div key={pkg} className="flex items-center justify-between text-sm py-1">
+                    <div className="flex items-center">
+                      <PackagePlus className="h-4 w-4 mr-2 text-green-400" />
+                      {pkg}
+                    </div>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => handleUninstall(pkg)}
+                      className="h-6 px-2 text-red-400 hover:bg-red-600"
+                    >
+                      Remove
+                    </Button>
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
         )}
       </CardContent>
-      <CardFooter className="justify-end">
+      <CardFooter className="justify-between">
+        <div className="text-xs text-editor-text-muted">
+          {isOnline 
+            ? 'Packages will be downloaded from the web and cached locally' 
+            : 'Connect to internet to search and download new packages'
+          }
+        </div>
         <Button 
           variant="outline" 
           onClick={onClose}

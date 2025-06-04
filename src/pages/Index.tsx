@@ -8,6 +8,7 @@ import { projectManager } from '../services/projectManager';
 import { useCodeExecution } from '../hooks/useCodeExecution';
 import { useAutoSave } from '../hooks/useAutoSave';
 import { toast } from 'sonner';
+import SyncStatusIndicator from '../components/SyncStatusIndicator';
 
 // Import the refactored components
 import FileExplorerPanel from '../components/FileExplorerPanel';
@@ -198,13 +199,18 @@ const Index = () => {
       
       <ResizablePanelGroup direction="horizontal" className="flex-1">
         <ResizablePanel defaultSize={15} minSize={10} maxSize={30}>
-          <FileExplorerPanel
-            files={files}
-            selectedFile={selectedFile}
-            onFileSelect={handleFileSelect}
-            selectedLanguage={selectedLanguage}
-            isOnline={isOnline}
-          />
+          <div className="h-full flex flex-col">
+            <div className="flex-1">
+              <FileExplorerPanel
+                files={files}
+                selectedFile={selectedFile}
+                onFileSelect={handleFileSelect}
+                selectedLanguage={selectedLanguage}
+                isOnline={isOnline}
+              />
+            </div>
+            <SyncStatusIndicator isOnline={isOnline} />
+          </div>
         </ResizablePanel>
         
         <ResizableHandle withHandle className="bg-editor-border" />
