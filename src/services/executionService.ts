@@ -1,4 +1,3 @@
-
 import { toast } from "sonner";
 import { fileSystemService } from "./fileSystemService";
 
@@ -21,21 +20,22 @@ export interface ExecutionResult {
   errors?: string[];
 }
 
-// Judge0 API configuration
-const JUDGE0_API_URL = 'https://judge0-ce.p.rapidapi.com';
+// Piston API configuration
+const PISTON_API_URL = 'https://emkc.org/api/v2/piston';
 
-// Language ID mappings for Judge0
-const JUDGE0_LANGUAGE_MAP: Record<string, number> = {
-  javascript: 63, // Node.js
-  python: 71,     // Python 3
-  cpp: 54,        // C++ (GCC 9.2.0)
-  java: 62,       // Java (OpenJDK 13.0.1)
-  php: 68,        // PHP (7.4.1)
-  c: 50,          // C (GCC 9.2.0)
-  csharp: 51,     // C# (Mono 6.6.0.161)
-  go: 60,         // Go (1.13.5)
-  rust: 73,       // Rust (1.40.0)
-  ruby: 72,       // Ruby (2.7.0)
+// Language mappings for Piston API
+const PISTON_LANGUAGE_MAP: Record<string, { language: string; version: string }> = {
+  javascript: { language: 'javascript', version: '18.15.0' }, // Node.js
+  python: { language: 'python', version: '3.10.0' },
+  cpp: { language: 'cpp', version: '10.2.0' },
+  java: { language: 'java', version: '15.0.2' },
+  php: { language: 'php', version: '8.2.3' },
+  c: { language: 'c', version: '10.2.0' },
+  csharp: { language: 'csharp', version: '6.12.0' },
+  go: { language: 'go', version: '1.16.2' },
+  rust: { language: 'rust', version: '1.68.2' },
+  ruby: { language: 'ruby', version: '3.0.1' },
+  typescript: { language: 'typescript', version: '5.0.3' },
 };
 
 export class ExecutionService {
@@ -69,10 +69,6 @@ export class ExecutionService {
   public getConnectionStatus(): boolean {
     return this.isOnline;
   }
-
-  private getApiKey(): string | null {
-    return localStorage.getItem('judge0_api_key');
-  }
   
   public async executeCode(
     code: string, 
@@ -91,155 +87,131 @@ export class ExecutionService {
     }
     
     if (effectiveMode === 'online') {
-      const apiKey = this.getApiKey();
-      if (!apiKey) {
-        toast.warning('Judge0 API key not configured. Using local simulation. Click "API Setup" to configure.');
-        return this.executeLocally(code, language, config);
-      }
-      return this.executeOnJudge0(code, language, config, apiKey);
+      return this.executeOnPiston(code, language, config);
     } else {
       return this.executeLocally(code, language, config);
     }
   }
   
-  private async executeOnJudge0(
+  private async executeOnPiston(
     code: string, 
     language: string, 
-    config: ExecutionConfig,
-    apiKey: string
+    config: ExecutionConfig
   ): Promise<ExecutionResult> {
     const startTime = performance.now();
     
-    console.log(`Executing on Judge0 with language: ${language}`);
+    console.log(`Executing on Piston with language: ${language}`);
 
-    const languageId = JUDGE0_LANGUAGE_MAP[language];
-    if (!languageId) {
-      toast.error(`Language ${language} not supported by Judge0. Using local simulation.`);
+    const languageConfig = PISTON_LANGUAGE_MAP[language];
+    if (!languageConfig) {
+      toast.error(`Language ${language} not supported by Piston. Using local simulation.`);
       return this.executeLocally(code, language, config);
     }
 
     try {
-      // Submit code for execution
-      const submission = await this.submitToJudge0(code, languageId, apiKey);
-      console.log('Submission created:', submission);
-      
-      // Poll for results
-      const result = await this.pollJudge0Result(submission.token, apiKey);
-      console.log('Execution result:', result);
+      const result = await this.submitToPiston(code, languageConfig);
+      console.log('Piston execution result:', result);
       
       const executionTime = (performance.now() - startTime) / 1000;
       
       const output: string[] = [
-        `[Judge0] Executing ${language} code...`,
-        `[Judge0] Language ID: ${languageId}`,
-        `[Judge0] Submission ID: ${submission.token}`,
+        `[Piston] Executing ${language} code...`,
+        `[Piston] Language: ${languageConfig.language} v${languageConfig.version}`,
       ];
 
-      if (result.stdout) {
+      if (result.run && result.run.stdout) {
         output.push('--- Output ---');
-        output.push(result.stdout.trim());
+        output.push(result.run.stdout.trim());
       }
 
-      if (result.stderr) {
+      if (result.run && result.run.stderr) {
         output.push('--- Errors ---');
-        output.push(result.stderr.trim());
+        output.push(result.run.stderr.trim());
       }
 
-      if (result.compile_output) {
-        output.push('--- Compilation ---');
-        output.push(result.compile_output.trim());
+      if (result.compile && result.compile.stdout) {
+        output.push('--- Compilation Output ---');
+        output.push(result.compile.stdout.trim());
       }
 
-      const statusDescription = this.getStatusDescription(result.status?.id);
-      output.push(`[Judge0] Status: ${statusDescription}`);
+      if (result.compile && result.compile.stderr) {
+        output.push('--- Compilation Errors ---');
+        output.push(result.compile.stderr.trim());
+      }
+
+      const exitCode = result.run ? result.run.code : (result.compile ? result.compile.code : 1);
+      output.push(`[Piston] Exit code: ${exitCode}`);
 
       return {
         output,
-        executionTime: result.time ? parseFloat(result.time) : executionTime,
-        exitCode: result.status?.id === 3 ? 0 : (result.status?.id || 1),
-        errors: result.stderr ? [result.stderr] : undefined
+        executionTime,
+        exitCode: exitCode || 0,
+        errors: result.run?.stderr || result.compile?.stderr ? 
+          [result.run?.stderr || result.compile?.stderr].filter(Boolean) : undefined
       };
 
     } catch (error) {
-      console.error('Judge0 execution error:', error);
-      toast.error('Failed to execute on Judge0. Falling back to local simulation.');
+      console.error('Piston execution error:', error);
+      toast.error('Failed to execute on Piston. Falling back to local simulation.');
       return this.executeLocally(code, language, config);
     }
   }
 
-  private getStatusDescription(statusId?: number): string {
-    const statusMap: Record<number, string> = {
-      1: 'In Queue',
-      2: 'Processing',
-      3: 'Accepted',
-      4: 'Wrong Answer',
-      5: 'Time Limit Exceeded',
-      6: 'Compilation Error',
-      7: 'Runtime Error (SIGSEGV)',
-      8: 'Runtime Error (SIGXFSZ)',
-      9: 'Runtime Error (SIGFPE)',
-      10: 'Runtime Error (SIGABRT)',
-      11: 'Runtime Error (NZEC)',
-      12: 'Runtime Error (Other)',
-      13: 'Internal Error',
-      14: 'Exec Format Error'
-    };
-    return statusMap[statusId || 0] || 'Unknown';
-  }
-
-  private async submitToJudge0(code: string, languageId: number, apiKey: string) {
-    console.log('Submitting to Judge0...', { languageId, codeLength: code.length });
+  private async submitToPiston(
+    code: string, 
+    languageConfig: { language: string; version: string }
+  ) {
+    console.log('Submitting to Piston...', { 
+      language: languageConfig.language, 
+      version: languageConfig.version,
+      codeLength: code.length 
+    });
     
-    const response = await fetch(`${JUDGE0_API_URL}/submissions?base64_encoded=false&wait=false`, {
+    const response = await fetch(`${PISTON_API_URL}/execute`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'X-RapidAPI-Host': 'judge0-ce.p.rapidapi.com',
-        'X-RapidAPI-Key': apiKey,
       },
       body: JSON.stringify({
-        source_code: code,
-        language_id: languageId,
+        language: languageConfig.language,
+        version: languageConfig.version,
+        files: [
+          {
+            name: `main.${this.getFileExtension(languageConfig.language)}`,
+            content: code,
+          },
+        ],
         stdin: '',
+        args: [],
+        compile_timeout: 10000,
+        run_timeout: 3000,
+        compile_memory_limit: -1,
+        run_memory_limit: -1,
       }),
     });
 
     if (!response.ok) {
-      throw new Error(`Judge0 submission failed: ${response.status} ${response.statusText}`);
+      throw new Error(`Piston execution failed: ${response.status} ${response.statusText}`);
     }
 
     return await response.json();
   }
 
-  private async pollJudge0Result(token: string, apiKey: string, maxAttempts: number = 10): Promise<any> {
-    console.log('Polling Judge0 result...', { token, maxAttempts });
-    
-    for (let attempt = 0; attempt < maxAttempts; attempt++) {
-      const response = await fetch(`${JUDGE0_API_URL}/submissions/${token}?base64_encoded=false`, {
-        method: 'GET',
-        headers: {
-          'X-RapidAPI-Host': 'judge0-ce.p.rapidapi.com',
-          'X-RapidAPI-Key': apiKey,
-        },
-      });
-
-      if (!response.ok) {
-        throw new Error(`Judge0 polling failed: ${response.status} ${response.statusText}`);
-      }
-
-      const result = await response.json();
-      console.log(`Poll attempt ${attempt + 1}:`, result.status);
-
-      // Status 1 = In Queue, Status 2 = Processing
-      if (result.status?.id > 2) {
-        return result;
-      }
-
-      // Wait before next poll
-      await new Promise(resolve => setTimeout(resolve, 1000));
-    }
-
-    throw new Error('Judge0 execution timeout');
+  private getFileExtension(language: string): string {
+    const extensions: Record<string, string> = {
+      'javascript': 'js',
+      'python': 'py',
+      'cpp': 'cpp',
+      'java': 'java',
+      'php': 'php',
+      'c': 'c',
+      'csharp': 'cs',
+      'go': 'go',
+      'rust': 'rs',
+      'ruby': 'rb',
+      'typescript': 'ts',
+    };
+    return extensions[language] || 'txt';
   }
   
   private async executeLocally(
