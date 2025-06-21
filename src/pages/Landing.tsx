@@ -36,7 +36,7 @@ const Landing = () => {
       <div className="container mx-auto px-4 py-8">
         <div className="text-center mb-12">
           <h1 className="text-5xl font-bold text-white mb-4">
-            Code<span className="text-blue-400">Craft</span>
+            ZCHPC<span className="text-blue-400">Code Space</span>
           </h1>
           <p className="text-xl text-slate-300 mb-8">
             A powerful multi-language code editor with integrated execution
