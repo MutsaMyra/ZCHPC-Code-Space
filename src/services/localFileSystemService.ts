@@ -1,4 +1,3 @@
-
 import { FileNode } from '../components/FileExplorer';
 import { toast } from 'sonner';
 
@@ -14,10 +13,13 @@ class LocalFileSystemService {
   private directoryHandle: FileSystemDirectoryHandle | null = null;
 
   private constructor() {
-    this.fileSystemSupported = 'showDirectoryPicker' in window;
+    // Check if we're in a secure context and not in an iframe
+    this.fileSystemSupported = 'showDirectoryPicker' in window && 
+                                window.isSecureContext && 
+                                window.self === window.top;
     
     if (!this.fileSystemSupported) {
-      console.warn('File System Access API not supported in this browser');
+      console.info('File System Access API not supported - using download fallback');
     }
   }
 
@@ -34,9 +36,8 @@ class LocalFileSystemService {
 
   public async promptForSaveLocation(): Promise<boolean> {
     if (!this.fileSystemSupported) {
-      // Fallback: prompt user to use modern browser or export as ZIP
-      toast.info('Your browser doesn\'t support direct file system access. Files will be exported as ZIP.');
-      return false;
+      toast.info('Direct file system access not available. Files will be downloaded automatically.');
+      return true; // Return true to proceed with download fallback
     }
 
     try {
@@ -48,63 +49,81 @@ class LocalFileSystemService {
       toast.success(`Save location selected: ${this.directoryHandle.name}`);
       return true;
     } catch (error) {
-      if (error instanceof Error && error.name !== 'AbortError') {
-        console.error('Failed to select directory:', error);
-        toast.error('Failed to select save location');
+      if (error instanceof Error) {
+        if (error.name === 'AbortError') {
+          return false; // User cancelled
+        } else if (error.name === 'SecurityError') {
+          toast.info('Direct file system access not available. Files will be downloaded automatically.');
+          return true; // Proceed with download fallback
+        }
       }
-      return false;
+      console.error('Failed to select directory:', error);
+      toast.error('Failed to select save location - using download fallback');
+      return true; // Proceed with download fallback
     }
   }
 
   public async saveFile(fileName: string, content: string): Promise<boolean> {
-    if (!this.directoryHandle) {
-      const locationSelected = await this.promptForSaveLocation();
-      if (!locationSelected) {
-        // Fallback to ZIP export for this file
-        return this.exportSingleFileAsZip(fileName, content);
+    // If we have directory handle, try to use it
+    if (this.directoryHandle) {
+      try {
+        const fileHandle = await this.directoryHandle.getFileHandle(fileName, { create: true });
+        const writable = await fileHandle.createWritable();
+        await writable.write(content);
+        await writable.close();
+        toast.success(`File saved: ${fileName}`);
+        return true;
+      } catch (error) {
+        console.error('Failed to save file to directory:', error);
+        // Fall back to download
       }
     }
 
-    try {
-      const fileHandle = await this.directoryHandle!.getFileHandle(fileName, { create: true });
-      const writable = await fileHandle.createWritable();
-      await writable.write(content);
-      await writable.close();
-      
-      return true;
-    } catch (error) {
-      console.error('Failed to save file:', error);
-      toast.error(`Failed to save ${fileName}`);
-      return false;
-    }
+    // Fallback: download the file
+    return this.downloadFile(fileName, content);
   }
 
   public async saveProject(files: FileNode[], projectName: string): Promise<boolean> {
-    if (!this.directoryHandle) {
-      const locationSelected = await this.promptForSaveLocation();
-      if (!locationSelected) {
-        // Fallback to ZIP export
-        return this.exportAsZip(files, projectName);
+    // If we have directory handle, try to use it
+    if (this.directoryHandle) {
+      try {
+        const projectHandle = await this.directoryHandle.getDirectoryHandle(projectName, { create: true });
+        await this.saveFilesRecursively(files, projectHandle);
+        toast.success(`Project saved to local filesystem: ${projectName}`);
+        return true;
+      } catch (error) {
+        console.error('Failed to save project to directory:', error);
+        // Fall back to ZIP download
       }
     }
 
+    // Fallback: export as ZIP
+    return this.exportAsZip(files, projectName);
+  }
+
+  private downloadFile(fileName: string, content: string): boolean {
     try {
-      // Create project directory
-      const projectHandle = await this.directoryHandle!.getDirectoryHandle(projectName, { create: true });
+      const blob = new Blob([content], { type: 'text/plain' });
+      const url = URL.createObjectURL(blob);
       
-      // Save all files preserving structure
-      await this.saveFilesRecursively(files, projectHandle);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = fileName;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
       
-      toast.success(`Project saved to local filesystem: ${projectName}`);
+      toast.success(`File downloaded: ${fileName}`);
       return true;
     } catch (error) {
-      console.error('Failed to save project:', error);
-      toast.error('Failed to save project to local filesystem');
+      console.error('Failed to download file:', error);
+      toast.error(`Failed to download ${fileName}`);
       return false;
     }
   }
 
-  private async saveFilesRecursively(files: FileNode[], directoryHandle: FileSystemDirectoryHandle): Promise<void> {
+  public async saveFilesRecursively(files: FileNode[], directoryHandle: FileSystemDirectoryHandle): Promise<void> {
     for (const file of files) {
       if (file.type === 'file' && file.content !== undefined) {
         try {
@@ -126,7 +145,7 @@ class LocalFileSystemService {
     }
   }
 
-  private async exportSingleFileAsZip(fileName: string, content: string): Promise<boolean> {
+  public async exportSingleFileAsZip(fileName: string, content: string): Promise<boolean> {
     try {
       const JSZip = (await import('jszip')).default;
       const zip = new JSZip();
@@ -193,11 +212,11 @@ class LocalFileSystemService {
   }
 
   public getCurrentSaveLocation(): string | null {
-    return this.directoryHandle?.name || null;
+    return this.directoryHandle?.name || 'Downloads';
   }
 
   public hasSaveLocation(): boolean {
-    return this.directoryHandle !== null;
+    return true; // Always return true since we have download fallback
   }
 }
 

@@ -43,10 +43,18 @@ const Index = () => {
       setFiles(currentProject.files);
       setSelectedLanguage(currentProject.metadata.language);
       
-      // Check if it's a web project by looking at language and framework
-      const isWebProject = ['javascript', 'typescript'].includes(currentProject.metadata.language) && 
-        ['React', 'Vue', 'Svelte', 'Vanilla'].includes(currentProject.metadata.framework || '');
+      // Better web project detection
+      const isWebProject = isWebProjectType(
+        currentProject.metadata.language, 
+        currentProject.metadata.framework
+      );
       setShowWebPreview(isWebProject);
+      
+      // Set web preview context
+      webPreviewService.setProjectContext(
+        currentProject.metadata.language, 
+        currentProject.metadata.framework || 'Vanilla'
+      );
       
       if (currentProject.files.length > 0) {
         setSelectedFile(currentProject.files[0]);
@@ -100,9 +108,11 @@ const Index = () => {
     
     const currentProject = projectManager.getCurrentProject();
     if (currentProject) {
-      const isWebProject = ['javascript', 'typescript'].includes(language) && 
-        ['React', 'Vue', 'Svelte', 'Vanilla'].includes(currentProject.metadata.framework || '');
+      const isWebProject = isWebProjectType(language, currentProject.metadata.framework);
       setShowWebPreview(isWebProject);
+      
+      // Update web preview context
+      webPreviewService.setProjectContext(language, currentProject.metadata.framework || 'Vanilla');
     }
   };
 
@@ -157,13 +167,20 @@ const Index = () => {
     }
   };
 
+  const isWebProjectType = (language: string, framework?: string) => {
+    const webLanguages = ['javascript', 'typescript', 'html', 'css', 'php'];
+    const webFrameworks = ['React', 'Vue', 'Svelte', 'Vanilla', 'Express'];
+    
+    return webLanguages.includes(language.toLowerCase()) || 
+           (framework && webFrameworks.includes(framework));
+  };
+
   const isWebProject = () => {
     const currentProject = projectManager.getCurrentProject();
     if (currentProject) {
-      return ['javascript', 'typescript'].includes(selectedLanguage) && 
-        ['React', 'Vue', 'Svelte', 'Vanilla'].includes(currentProject.metadata.framework || '');
+      return isWebProjectType(selectedLanguage, currentProject.metadata.framework);
     }
-    return ['javascript', 'html', 'css'].includes(selectedLanguage);
+    return isWebProjectType(selectedLanguage);
   };
 
   return (
