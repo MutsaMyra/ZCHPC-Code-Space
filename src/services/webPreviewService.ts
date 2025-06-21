@@ -224,6 +224,15 @@ class WebPreviewService {
       `;
     }
 
+    const exampleCode = `function App() {
+  return (
+    <div>
+      <h1>Hello React!</h1>
+      <p>Your component content here</p>
+    </div>
+  );
+}`;
+
     return `
 <!DOCTYPE html>
 <html>
@@ -271,14 +280,7 @@ class WebPreviewService {
                             <p>Define an <code>App</code> component to see it rendered here.</p>
                             <div style={{ background: '#f6f8fa', padding: '20px', borderRadius: '8px', marginTop: '20px', textAlign: 'left' }}>
                                 <h3>Example:</h3>
-                                <pre style={{ margin: 0 }}>{`function App() {
-  return (
-    <div>
-      <h1>Hello React!</h1>
-      <p>Your component content here</p>
-    </div>
-  );
-}`}</pre>
+                                <pre style={{ margin: 0 }}>${exampleCode}</pre>
                             </div>
                         </div>
                     );
