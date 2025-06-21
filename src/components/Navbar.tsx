@@ -1,14 +1,20 @@
-
-import React, { useState, useEffect } from 'react';
-import { Button } from '@/components/ui/button';
-import LanguageSelector from './LanguageSelector';
-import { Separator } from '@/components/ui/separator';
-import { Save, Code, Package, Settings, Play, Wifi, WifiOff, Key, Home } from 'lucide-react';
-import { toast } from 'sonner';
-import DependencyManager from './DependencyManager';
-import { Dialog, DialogContent } from '@/components/ui/dialog';
-import ExecutionSettings, { ExecutionConfig } from './ExecutionSettings';
-import { useNavigate } from 'react-router-dom';
+import React, { useState, useEffect } from "react";
+import { Button } from "@/components/ui/button";
+import LanguageSelector from "./LanguageSelector";
+import { Separator } from "@/components/ui/separator";
+import {
+  Save,
+  Package,
+  Settings,
+  Play,
+  Wifi,
+  WifiOff,
+  Home,
+} from "lucide-react";
+import DependencyManager from "./DependencyManager";
+import { Dialog, DialogContent } from "@/components/ui/dialog";
+import ExecutionSettings, { ExecutionConfig } from "./ExecutionSettings";
+import { useNavigate } from "react-router-dom";
 
 interface NavbarProps {
   selectedLanguage: string;
@@ -21,21 +27,21 @@ interface NavbarProps {
   isOnline: boolean;
 }
 
-const Navbar: React.FC<NavbarProps> = ({ 
-  selectedLanguage, 
+const Navbar: React.FC<NavbarProps> = ({
+  selectedLanguage,
   onLanguageChange,
   onRunCode,
   onSave,
   isRunning,
   executionConfig,
   onExecutionConfigChange,
-  isOnline
+  isOnline,
 }) => {
   const navigate = useNavigate();
   const [isDependencyManagerOpen, setIsDependencyManagerOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isApiKeySetupOpen, setIsApiKeySetupOpen] = useState(false);
-  
+
   const handleSave = () => {
     onSave();
   };
@@ -53,7 +59,7 @@ const Navbar: React.FC<NavbarProps> = ({
   };
 
   const handleGoHome = () => {
-    navigate('/');
+    navigate("/");
   };
 
   return (
@@ -69,21 +75,23 @@ const Navbar: React.FC<NavbarProps> = ({
           Projects
         </Button>
         <h1 className="text-lg font-bold text-white">ZCHPC Code Spaces</h1>
-        <span className="text-xs px-2 py-1 bg-editor-active rounded-full">Beta</span>
         {isOnline ? (
           <Wifi className="h-4 w-4 text-green-500" />
         ) : (
           <WifiOff className="h-4 w-4 text-yellow-500" />
         )}
       </div>
-      
+
       <Separator orientation="vertical" className="mx-4 h-8 bg-editor-border" />
-      
+
       <div className="flex-1 flex items-center space-x-4">
-        <LanguageSelector selectedLanguage={selectedLanguage} onLanguageChange={onLanguageChange} />
-        
-        <Button 
-          size="sm" 
+        <LanguageSelector
+          selectedLanguage={selectedLanguage}
+          onLanguageChange={onLanguageChange}
+        />
+
+        <Button
+          size="sm"
           variant="outline"
           className="bg-editor-sidebar border-editor-border text-editor-text"
           onClick={handleSave}
@@ -91,17 +99,19 @@ const Navbar: React.FC<NavbarProps> = ({
           <Save className="h-4 w-4 mr-2" />
           Save
         </Button>
-        
-        <Button 
+
+        <Button
           size="sm"
-          className={`${isRunning ? 'bg-yellow-600' : 'bg-green-600'} hover:${isRunning ? 'bg-yellow-700' : 'bg-green-700'} text-white`}
+          className={`${isRunning ? "bg-yellow-600" : "bg-green-600"} hover:${
+            isRunning ? "bg-yellow-700" : "bg-green-700"
+          } text-white`}
           onClick={onRunCode}
           disabled={isRunning}
         >
           <Play className="h-4 w-4 mr-2" />
-          {isRunning ? 'Running...' : 'Run'}
+          {isRunning ? "Running..." : "Run"}
         </Button>
-        
+
         <Button
           size="sm"
           variant="outline"
@@ -111,7 +121,7 @@ const Navbar: React.FC<NavbarProps> = ({
           <Package className="h-4 w-4 mr-2" />
           Packages
         </Button>
-        
+
         <Button
           size="sm"
           variant="outline"
@@ -122,24 +132,26 @@ const Navbar: React.FC<NavbarProps> = ({
           Settings
         </Button>
       </div>
-      
-      <Dialog open={isDependencyManagerOpen} onOpenChange={setIsDependencyManagerOpen}>
+
+      <Dialog
+        open={isDependencyManagerOpen}
+        onOpenChange={setIsDependencyManagerOpen}
+      >
         <DialogContent className="bg-editor-sidebar border-editor-border text-editor-text p-0 max-w-3xl">
-          <DependencyManager 
-            selectedLanguage={selectedLanguage} 
-            onClose={() => setIsDependencyManagerOpen(false)} 
+          <DependencyManager
+            selectedLanguage={selectedLanguage}
+            onClose={() => setIsDependencyManagerOpen(false)}
           />
         </DialogContent>
       </Dialog>
-      
+
       <ExecutionSettings
         isOpen={isSettingsOpen}
         onClose={() => setIsSettingsOpen(false)}
         config={executionConfig}
         onConfigChange={onExecutionConfigChange}
       />
-      
-      </div>
+    </div>
   );
 };
 
