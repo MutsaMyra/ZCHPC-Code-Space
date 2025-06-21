@@ -157,6 +157,15 @@ const Index = () => {
     }
   };
 
+  const isWebProject = () => {
+    const currentProject = projectManager.getCurrentProject();
+    if (currentProject) {
+      return ['javascript', 'typescript'].includes(selectedLanguage) && 
+        ['React', 'Vue', 'Svelte', 'Vanilla'].includes(currentProject.metadata.framework || '');
+    }
+    return ['javascript', 'html', 'css'].includes(selectedLanguage);
+  };
+
   return (
     <div className="h-screen bg-editor flex flex-col">
       <Navbar
@@ -168,6 +177,9 @@ const Index = () => {
         executionConfig={executionConfig}
         onExecutionConfigChange={setExecutionConfig}
         isOnline={isOnline}
+        isWebProject={isWebProject()}
+        isPreviewVisible={showWebPreview}
+        onTogglePreview={() => setShowWebPreview(!showWebPreview)}
       />
       
       <div className="flex-1 overflow-hidden">
