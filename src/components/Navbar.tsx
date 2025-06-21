@@ -8,7 +8,6 @@ import { toast } from 'sonner';
 import DependencyManager from './DependencyManager';
 import { Dialog, DialogContent } from '@/components/ui/dialog';
 import ExecutionSettings, { ExecutionConfig } from './ExecutionSettings';
-import ApiKeySetup from './ApiKeySetup';
 import { useNavigate } from 'react-router-dom';
 
 interface NavbarProps {
@@ -69,7 +68,7 @@ const Navbar: React.FC<NavbarProps> = ({
           <Home className="h-4 w-4 mr-2" />
           Projects
         </Button>
-        <h1 className="text-lg font-bold text-white">CodeCraft</h1>
+        <h1 className="text-lg font-bold text-white">ZCHPC Code Spaces</h1>
         <span className="text-xs px-2 py-1 bg-editor-active rounded-full">Beta</span>
         {isOnline ? (
           <Wifi className="h-4 w-4 text-green-500" />
@@ -117,16 +116,6 @@ const Navbar: React.FC<NavbarProps> = ({
           size="sm"
           variant="outline"
           className="bg-editor-sidebar border-editor-border text-editor-text"
-          onClick={handleApiKeySetup}
-        >
-          <Key className="h-4 w-4 mr-2" />
-          API Setup
-        </Button>
-        
-        <Button
-          size="sm"
-          variant="outline"
-          className="bg-editor-sidebar border-editor-border text-editor-text"
           onClick={handleSettings}
         >
           <Settings className="h-4 w-4 mr-2" />
@@ -150,11 +139,7 @@ const Navbar: React.FC<NavbarProps> = ({
         onConfigChange={onExecutionConfigChange}
       />
       
-      <ApiKeySetup
-        isOpen={isApiKeySetupOpen}
-        onClose={() => setIsApiKeySetupOpen(false)}
-      />
-    </div>
+      </div>
   );
 };
 
