@@ -31,7 +31,10 @@ export const useCodeExecution = () => {
     }
 
     setIsRunning(true);
+    
+    // Clear terminal and cache before execution
     setTerminalOutput([
+      `[${new Date().toLocaleTimeString()}] Clearing runtime cache and preparing fresh execution...`,
       `[${new Date().toLocaleTimeString()}] Running ${selectedFile.name} in ${executionConfig.mode} mode using ${executionConfig.hardware.toUpperCase()}...`,
       isOnline ? 'Network connected: Remote execution available' : 'Network disconnected: Using local execution only'
     ]);
@@ -43,12 +46,14 @@ export const useCodeExecution = () => {
         mode: isOnline ? executionConfig.mode : 'offline'
       };
 
-      console.log(`Executing code: ${selectedFile.content.substring(0, 100)}...`);
+      console.log(`Executing fresh code: ${selectedFile.content.substring(0, 100)}...`);
       
+      // Always pass the current file content directly to ensure latest version
       const result = await executionService.executeCode(
-        selectedFile.content,
+        selectedFile.content, // Always use current content
         selectedLanguage,
-        effectiveConfig
+        effectiveConfig,
+        true // Force fresh execution
       );
 
       setLastExecutionResult(result);

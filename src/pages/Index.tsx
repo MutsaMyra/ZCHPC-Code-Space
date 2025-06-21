@@ -1,102 +1,60 @@
-
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from "@/components/ui/resizable";
 import Navbar from '../components/Navbar';
-import { FileNode } from '../components/FileExplorer';
-import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable";
-import { executionService, ExecutionConfig } from '../services/executionService';
-import { projectManager } from '../services/projectManager';
-import { useCodeExecution } from '../hooks/useCodeExecution';
-import { useAutoSave } from '../hooks/useAutoSave';
-import { toast } from 'sonner';
-import SyncStatusIndicator from '../components/SyncStatusIndicator';
-import SaveLocationPrompt from '../components/SaveLocationPrompt';
-import WebPreview from '../components/WebPreview';
-
-// Import the refactored components
 import FileExplorerPanel from '../components/FileExplorerPanel';
 import EditorPanel from '../components/EditorPanel';
 import TerminalPanel from '../components/TerminalPanel';
+import WebPreview from '../components/WebPreview';
+import CollaborativeEditor from '../components/CollaborativeEditor';
+import SaveLocationPrompt from '../components/SaveLocationPrompt';
+import { FileNode } from '../components/FileExplorer';
+import { useCodeExecution } from '../hooks/useCodeExecution';
+import { useAutoSave } from '../hooks/useAutoSave';
+import { ExecutionConfig } from '../services/executionService';
+import { fileSystemService } from '../services/fileSystemService';
+import { projectManager } from '../services/projectManager';
+import { webPreviewService } from '../services/webPreviewService';
+import { languages } from '../components/LanguageSelector';
 
 const Index = () => {
-  const navigate = useNavigate();
+  const [selectedFile, setSelectedFile] = useState<FileNode | null>(null);
   const [selectedLanguage, setSelectedLanguage] = useState('javascript');
   const [files, setFiles] = useState<FileNode[]>([]);
-  const [selectedFile, setSelectedFile] = useState<FileNode | null>(null);
-  const [editorContent, setEditorContent] = useState<string>('');
   const [isOnline, setIsOnline] = useState(navigator.onLine);
-  const [currentProjectId, setCurrentProjectId] = useState<string | null>(null);
-  const [currentProjectName, setCurrentProjectName] = useState<string>('');
   const [showSavePrompt, setShowSavePrompt] = useState(false);
-  const [saveLocationSet, setSaveLocationSet] = useState(false);
-  const [webPreviewVisible, setWebPreviewVisible] = useState(false);
+  const [savePromptTimer, setSavePromptTimer] = useState<NodeJS.Timeout | null>(null);
+  const [showCollaborativePanel, setShowCollaborativePanel] = useState(false);
+  const [showWebPreview, setShowWebPreview] = useState(false);
+  
+  const { runCode, isRunning, terminalOutput, clearTerminal } = useCodeExecution();
+  const { saveFile, saveProject, configureSaveLocation, isConfigured, markPendingChanges, activityLog } = useAutoSave();
+  
   const [executionConfig, setExecutionConfig] = useState<ExecutionConfig>({
-    mode: navigator.onLine ? 'online' : 'offline',
+    mode: 'online',
     hardware: 'cpu',
     cpuCores: 4,
-    gpuMemory: 4,
+    gpuMemory: 8,
     autoDetect: true,
     timeout: 30
   });
-  
-  // Use the code execution hook
-  const { 
-    isRunning, 
-    terminalOutput, 
-    runCode,
-    clearTerminal
-  } = useCodeExecution();
 
-  // Auto-save functionality
-  const { forceSave } = useAutoSave(files, currentProjectId, {
-    enabled: true,
-    delay: 2000,
-  });
-  
-  // Check if user has a current project, otherwise redirect to landing
   useEffect(() => {
     const currentProject = projectManager.getCurrentProject();
-    if (!currentProject) {
-      navigate('/');
-      return;
-    }
-    
-    setCurrentProjectId(currentProject.metadata.id);
-    setCurrentProjectName(currentProject.metadata.name);
-    setFiles(currentProject.files);
-    setSelectedLanguage(currentProject.metadata.language);
-    
-    // Select first file if available
-    const firstFile = findFirstFile(currentProject.files);
-    if (firstFile) {
-      setSelectedFile(firstFile);
-      setEditorContent(firstFile.content || '');
-    }
-
-    // Show save location prompt after 2 minutes if not set
-    const timer = setTimeout(() => {
-      if (!saveLocationSet) {
-        setShowSavePrompt(true);
+    if (currentProject) {
+      setFiles(currentProject.files);
+      setSelectedLanguage(currentProject.metadata.language);
+      
+      const isWebProject = webPreviewService.isWebProject(currentProject.metadata.language, currentProject.metadata.framework);
+      setShowWebPreview(isWebProject);
+      
+      if (currentProject.files.length > 0) {
+        setSelectedFile(currentProject.files[0]);
       }
-    }, 2 * 60 * 1000); // 2 minutes
-
-    return () => clearTimeout(timer);
-  }, [navigate, saveLocationSet]);
-
-  // Helper function to find first file in the project
-  const findFirstFile = (fileNodes: FileNode[]): FileNode | null => {
-    for (const node of fileNodes) {
-      if (node.type === 'file') {
-        return node;
-      } else if (node.children) {
-        const found = findFirstFile(node.children);
-        if (found) return found;
-      }
+    } else {
+      setFiles(fileSystemService.getFiles());
     }
-    return null;
-  };
-  
-  // Update online status when connection changes
+  }, []);
+
   useEffect(() => {
     const handleOnline = () => setIsOnline(true);
     const handleOffline = () => setIsOnline(false);
@@ -109,108 +67,99 @@ const Index = () => {
       window.removeEventListener('offline', handleOffline);
     };
   }, []);
-  
+
   useEffect(() => {
-    // Update execution mode based on connectivity when auto-detect is enabled
-    if (executionConfig.autoDetect) {
-      const recommendedMode = executionService.getRecommendedMode();
-      if (recommendedMode !== executionConfig.mode) {
-        setExecutionConfig(prev => ({ ...prev, mode: recommendedMode }));
+    if (!isConfigured) {
+      const timer = setTimeout(() => {
+        setShowSavePrompt(true);
+      }, 5 * 60 * 1000);
+      
+      setSavePromptTimer(timer);
+      
+      return () => {
+        if (timer) clearTimeout(timer);
+      };
+    }
+  }, [isConfigured]);
+
+  useEffect(() => {
+    if (selectedFile && selectedFile.content) {
+      markPendingChanges();
+      
+      const autoSaveTimer = setTimeout(() => {
+        saveFile(selectedFile);
+      }, 30000);
+      
+      return () => clearTimeout(autoSaveTimer);
+    }
+  }, [selectedFile, markPendingChanges, saveFile]);
+
+  const handleLanguageChange = (language: string) => {
+    setSelectedLanguage(language);
+    
+    const currentProject = projectManager.getCurrentProject();
+    if (currentProject) {
+      const isWebProject = webPreviewService.isWebProject(language, currentProject.metadata.framework);
+      setShowWebPreview(isWebProject);
+    }
+  };
+
+  const handleEditorChange = (value: string | undefined) => {
+    if (selectedFile && value !== undefined) {
+      const updatedFile = { ...selectedFile, content: value };
+      setSelectedFile(updatedFile);
+      
+      const updateFilesRecursively = (nodes: FileNode[]): FileNode[] => {
+        return nodes.map(node => {
+          if (node.id === selectedFile.id) {
+            return updatedFile;
+          } else if (node.children) {
+            return { ...node, children: updateFilesRecursively(node.children) };
+          }
+          return node;
+        });
+      };
+      
+      setFiles(updateFilesRecursively(files));
+      
+      const currentProject = projectManager.getCurrentProject();
+      if (currentProject) {
+        projectManager.updateProjectFiles(currentProject.metadata.id, updateFilesRecursively(files));
       }
     }
-  }, [executionConfig.autoDetect, isOnline]);
-
-  // Determine if web preview should be available
-  const isWebProject = selectedLanguage === 'javascript' || 
-    (selectedFile && (selectedFile.extension === '.html' || selectedFile.extension === '.css'));
-  
-  const handleFileSelect = (file: FileNode) => {
-    setSelectedFile(file);
-    setEditorContent(file.content || '');
   };
 
-  const handleFilesChange = (newFiles: FileNode[]) => {
-    setFiles(newFiles);
-    // Update project with new files
-    if (currentProjectId) {
-      projectManager.updateProjectFiles(currentProjectId, newFiles);
-    }
+  const handleRunCode = async () => {
+    await runCode(selectedFile, selectedLanguage, executionConfig, isOnline);
   };
-  
-  const handleEditorChange = (value: string | undefined) => {
-    if (value !== undefined && selectedFile) {
-      setEditorContent(value);
-      
-      // Update file content
-      const updatedFile = { ...selectedFile, content: value };
-      
-      // Update files array
-      setFiles(prevFiles => {
-        const updateFileContent = (nodes: FileNode[]): FileNode[] => {
-          return nodes.map(node => {
-            if (node.id === selectedFile.id) {
-              return { ...node, content: value };
-            } else if (node.children) {
-              return {
-                ...node,
-                children: updateFileContent(node.children),
-              };
-            }
-            return node;
-          });
-        };
-        
-        return updateFileContent(prevFiles);
-      });
+
+  const handleSave = async () => {
+    if (selectedFile) {
+      await saveFile(selectedFile);
+    } else {
+      const currentProject = projectManager.getCurrentProject();
+      if (currentProject) {
+        await saveProject(files, currentProject.metadata.name);
+      }
     }
   };
 
-  const handleRunCode = () => {
-    runCode(selectedFile, selectedLanguage, executionConfig, isOnline);
+  const handleSaveLocationSetup = async () => {
+    const success = await configureSaveLocation();
+    if (success) {
+      setShowSavePrompt(false);
+      if (savePromptTimer) {
+        clearTimeout(savePromptTimer);
+        setSavePromptTimer(null);
+      }
+    }
   };
-
-  const handleRunCodeCell = async (code: string) => {
-    if (!code.trim()) return;
-    
-    // Create a temporary file node for the cell code
-    const tempFile: FileNode = {
-      id: 'temp-cell',
-      name: 'temp.py',
-      type: 'file',
-      content: code
-    };
-    
-    return runCode(tempFile, selectedLanguage, executionConfig, isOnline);
-  };
-
-  const handleSave = () => {
-    forceSave();
-    toast.success('Project saved successfully');
-  };
-
-  const handleSaveLocationSet = () => {
-    setSaveLocationSet(true);
-  };
-
-  // If no project is loaded, show loading or redirect
-  if (!currentProjectId) {
-    return (
-      <div className="flex items-center justify-center h-screen bg-editor text-editor-text">
-        <div className="text-center">
-          <div className="text-lg">Loading project...</div>
-          <div className="text-sm text-editor-text-muted mt-2">
-            If this persists, you may need to create or select a project.
-          </div>
-        </div>
-      </div>
-    );
-  }
 
   return (
-    <div className="flex flex-col h-screen bg-editor text-editor-text">
-      <Navbar 
-        selectedLanguage={selectedLanguage} 
-        onLanguageChange={setSelectedLanguage} 
+    <div className="h-screen bg-editor flex flex-col">
+      <Navbar
+        selectedLanguage={selectedLanguage}
+        onLanguageChange={handleLanguageChange}
         onRunCode={handleRunCode}
         onSave={handleSave}
         isRunning={isRunning}
@@ -219,79 +168,88 @@ const Index = () => {
         isOnline={isOnline}
       />
       
-      <ResizablePanelGroup direction="horizontal" className="flex-1">
-        <ResizablePanel defaultSize={15} minSize={10} maxSize={30}>
-          <div className="h-full flex flex-col">
-            <div className="flex-1">
+      <div className="flex-1 overflow-hidden">
+        <ResizablePanelGroup direction="horizontal">
+          <ResizablePanel defaultSize={20} minSize={15}>
+            <div className="h-full flex flex-col">
               <FileExplorerPanel
                 files={files}
                 selectedFile={selectedFile}
-                onFileSelect={handleFileSelect}
-                onFilesChange={handleFilesChange}
-                selectedLanguage={selectedLanguage}
-                isOnline={isOnline}
+                onFileSelect={setSelectedFile}
+                onFileChange={(newFiles) => setFiles(newFiles)}
               />
+              
+              <div className="p-2 border-t border-editor-border">
+                <button
+                  onClick={() => setShowCollaborativePanel(!showCollaborativePanel)}
+                  className="w-full text-sm text-editor-text hover:bg-editor-highlight p-2 rounded"
+                >
+                  {showCollaborativePanel ? 'Hide' : 'Show'} Collaboration
+                </button>
+              </div>
+              
+              {showCollaborativePanel && (
+                <div className="border-t border-editor-border p-2">
+                  <CollaborativeEditor
+                    projectId={projectManager.getCurrentProject()?.metadata.id || 'default'}
+                    onShare={(projectId) => console.log('Sharing project:', projectId)}
+                  />
+                </div>
+              )}
             </div>
-            <SyncStatusIndicator isOnline={isOnline} />
-          </div>
-        </ResizablePanel>
-        
-        <ResizableHandle withHandle className="bg-editor-border" />
-        
-        <ResizablePanel defaultSize={isWebProject && webPreviewVisible ? 60 : 85} className="bg-editor flex flex-col overflow-hidden">
-          <ResizablePanelGroup direction="vertical" className="h-full">
-            <ResizablePanel defaultSize={70} minSize={30} className="overflow-hidden">
-              <EditorPanel 
-                selectedFile={selectedFile}
-                selectedLanguage={selectedLanguage}
-                onEditorChange={handleEditorChange}
-                onRunCode={handleRunCodeCell}
-                isOnline={isOnline}
-              />
-            </ResizablePanel>
-            
-            <ResizableHandle withHandle className="bg-editor-border" />
-            
-            <ResizablePanel defaultSize={30} minSize={20}>
-              <TerminalPanel 
-                terminalOutput={terminalOutput}
-                isRunning={isRunning}
-                executionConfig={executionConfig}
-                isOnline={isOnline}
-                onClearTerminal={clearTerminal}
-              />
-            </ResizablePanel>
-          </ResizablePanelGroup>
-        </ResizablePanel>
-
-        {/* Web Preview Panel */}
-        {isWebProject && (
-          <>
-            <ResizableHandle withHandle className="bg-editor-border" />
-            <ResizablePanel 
-              defaultSize={webPreviewVisible ? 25 : 0} 
-              minSize={webPreviewVisible ? 20 : 0}
-              maxSize={webPreviewVisible ? 50 : 0}
-            >
-              <WebPreview
-                files={files}
-                selectedFile={selectedFile}
-                language={selectedLanguage}
-                framework="React"
-                isVisible={webPreviewVisible}
-                onToggleVisibility={() => setWebPreviewVisible(!webPreviewVisible)}
-              />
-            </ResizablePanel>
-          </>
-        )}
-      </ResizablePanelGroup>
-
-      {/* Save Location Prompt */}
+          </ResizablePanel>
+          
+          <ResizableHandle />
+          
+          <ResizablePanel defaultSize={showWebPreview ? 40 : 50}>
+            <EditorPanel
+              selectedFile={selectedFile}
+              selectedLanguage={selectedLanguage}
+              onEditorChange={handleEditorChange}
+              onRunCode={async (code) => {
+                if (selectedFile) {
+                  const tempFile = { ...selectedFile, content: code };
+                  await runCode(tempFile, selectedLanguage, executionConfig, isOnline);
+                }
+              }}
+              isOnline={isOnline}
+            />
+          </ResizablePanel>
+          
+          <ResizableHandle />
+          
+          <ResizablePanel defaultSize={showWebPreview ? 40 : 30}>
+            <ResizablePanelGroup direction="vertical">
+              {showWebPreview && (
+                <>
+                  <ResizablePanel defaultSize={60}>
+                    <WebPreview
+                      files={files}
+                      selectedLanguage={selectedLanguage}
+                      framework={projectManager.getCurrentProject()?.metadata.framework || 'Vanilla'}
+                    />
+                  </ResizablePanel>
+                  <ResizableHandle />
+                </>
+              )}
+              
+              <ResizablePanel defaultSize={showWebPreview ? 40 : 100}>
+                <TerminalPanel
+                  output={terminalOutput}
+                  onClear={clearTerminal}
+                  isRunning={isRunning}
+                  activityLog={activityLog}
+                />
+              </ResizablePanel>
+            </ResizablePanelGroup>
+          </ResizablePanel>
+        </ResizablePanelGroup>
+      </div>
+      
       <SaveLocationPrompt
         isOpen={showSavePrompt}
-        onClose={() => setShowSavePrompt(false)}
-        onSaveLocationSet={handleSaveLocationSet}
-        projectName={currentProjectName}
+        onSetLocation={handleSaveLocationSetup}
+        onDismiss={() => setShowSavePrompt(false)}
       />
     </div>
   );
