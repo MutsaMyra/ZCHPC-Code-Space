@@ -34,7 +34,8 @@ class LocalFileSystemService {
 
   public async promptForSaveLocation(): Promise<boolean> {
     if (!this.fileSystemSupported) {
-      toast.error('File system access not supported in this browser');
+      // Fallback: prompt user to use modern browser or export as ZIP
+      toast.info('Your browser doesn\'t support direct file system access. Files will be exported as ZIP.');
       return false;
     }
 
@@ -44,7 +45,7 @@ class LocalFileSystemService {
         startIn: 'documents'
       });
       
-      toast.success(`Selected save location: ${this.directoryHandle.name}`);
+      toast.success(`Save location selected: ${this.directoryHandle.name}`);
       return true;
     } catch (error) {
       if (error instanceof Error && error.name !== 'AbortError') {
@@ -58,7 +59,10 @@ class LocalFileSystemService {
   public async saveFile(fileName: string, content: string): Promise<boolean> {
     if (!this.directoryHandle) {
       const locationSelected = await this.promptForSaveLocation();
-      if (!locationSelected) return false;
+      if (!locationSelected) {
+        // Fallback to ZIP export for this file
+        return this.exportSingleFileAsZip(fileName, content);
+      }
     }
 
     try {
@@ -78,7 +82,10 @@ class LocalFileSystemService {
   public async saveProject(files: FileNode[], projectName: string): Promise<boolean> {
     if (!this.directoryHandle) {
       const locationSelected = await this.promptForSaveLocation();
-      if (!locationSelected) return false;
+      if (!locationSelected) {
+        // Fallback to ZIP export
+        return this.exportAsZip(files, projectName);
+      }
     }
 
     try {
@@ -119,8 +126,34 @@ class LocalFileSystemService {
     }
   }
 
-  public async exportAsZip(files: FileNode[], projectName: string): Promise<void> {
-    // Fallback for browsers that don't support File System Access API
+  private async exportSingleFileAsZip(fileName: string, content: string): Promise<boolean> {
+    try {
+      const JSZip = (await import('jszip')).default;
+      const zip = new JSZip();
+      
+      zip.file(fileName, content);
+      
+      const zipContent = await zip.generateAsync({ type: 'blob' });
+      const url = URL.createObjectURL(zipContent);
+      
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${fileName}.zip`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      
+      toast.success('File exported as ZIP');
+      return true;
+    } catch (error) {
+      console.error('Failed to export file as ZIP:', error);
+      toast.error('Failed to export file');
+      return false;
+    }
+  }
+
+  public async exportAsZip(files: FileNode[], projectName: string): Promise<boolean> {
     try {
       const JSZip = (await import('jszip')).default;
       const zip = new JSZip();
@@ -139,9 +172,11 @@ class LocalFileSystemService {
       URL.revokeObjectURL(url);
       
       toast.success('Project exported as ZIP file');
+      return true;
     } catch (error) {
       console.error('Failed to export as ZIP:', error);
       toast.error('Failed to export project');
+      return false;
     }
   }
 
@@ -159,6 +194,10 @@ class LocalFileSystemService {
 
   public getCurrentSaveLocation(): string | null {
     return this.directoryHandle?.name || null;
+  }
+
+  public hasSaveLocation(): boolean {
+    return this.directoryHandle !== null;
   }
 }
 

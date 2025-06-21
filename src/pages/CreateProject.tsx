@@ -4,10 +4,12 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { ArrowLeft, ArrowRight, Check } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { languages, Language } from '../components/LanguageSelector';
 import { projectManager } from '../services/projectManager';
+import { localFileSystemService } from '../services/localFileSystemService';
 import { toast } from 'sonner';
 
 interface DependencyOption {
@@ -55,6 +57,7 @@ const CreateProject = () => {
   const [step, setStep] = useState(1);
   const [projectName, setProjectName] = useState('');
   const [selectedLanguage, setSelectedLanguage] = useState<Language | null>(null);
+  const [projectType, setProjectType] = useState<'vanilla' | 'framework'>('vanilla');
   const [selectedDependencies, setSelectedDependencies] = useState<string[]>([]);
   const [isCreating, setIsCreating] = useState(false);
 
@@ -80,14 +83,28 @@ const CreateProject = () => {
     setIsCreating(true);
     
     try {
+      // First prompt for save location
+      const saveLocationSelected = await localFileSystemService.promptForSaveLocation();
+      if (!saveLocationSelected) {
+        toast.error('Please select a save location to continue');
+        setIsCreating(false);
+        return;
+      }
+
+      const framework = projectType === 'framework' ? selectedLanguage.framework : 'vanilla';
+      
       const project = projectManager.createProject(
         projectName.trim(),
         selectedLanguage.id,
-        selectedLanguage.framework,
-        selectedDependencies
+        framework,
+        selectedDependencies,
+        projectType
       );
       
-      toast.success('Project created successfully!');
+      // Save project to local file system immediately
+      await localFileSystemService.saveProject(project.files, projectName.trim());
+      
+      toast.success('Project created and saved locally!');
       navigate('/editor');
     } catch (error) {
       toast.error('Failed to create project');
@@ -136,9 +153,9 @@ const CreateProject = () => {
           {step === 1 && (
             <Card className="bg-slate-800 border-slate-700">
               <CardHeader>
-                <CardTitle className="text-white">Project Details & Language</CardTitle>
+                <CardTitle className="text-white">Project Configuration</CardTitle>
                 <CardDescription className="text-slate-400">
-                  Choose your project name and programming language
+                  Configure your project details and select technology stack
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-6">
@@ -154,7 +171,7 @@ const CreateProject = () => {
                 </div>
 
                 <div className="space-y-3">
-                  <Label className="text-white">Select Language & Framework</Label>
+                  <Label className="text-white">Select Language</Label>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                     {languages.map((language) => (
                       <div
@@ -177,6 +194,31 @@ const CreateProject = () => {
                     ))}
                   </div>
                 </div>
+
+                {selectedLanguage && (
+                  <div className="space-y-3">
+                    <Label className="text-white">Project Type</Label>
+                    <Select value={projectType} onValueChange={(value: 'vanilla' | 'framework') => setProjectType(value)}>
+                      <SelectTrigger className="bg-slate-700 border-slate-600 text-white">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent className="bg-slate-700 border-slate-600">
+                        <SelectItem value="vanilla" className="text-white">
+                          Vanilla {selectedLanguage.name}
+                        </SelectItem>
+                        <SelectItem value="framework" className="text-white">
+                          {selectedLanguage.framework} Project
+                        </SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <p className="text-sm text-slate-400">
+                      {projectType === 'vanilla' 
+                        ? `A minimal ${selectedLanguage.name} setup for quick scripting and learning`
+                        : `A complete ${selectedLanguage.framework} project with proper structure and configuration`
+                      }
+                    </p>
+                  </div>
+                )}
 
                 <div className="flex justify-end">
                   <Button 
@@ -245,7 +287,7 @@ const CreateProject = () => {
                     disabled={!canCreateProject || isCreating}
                     className="bg-green-600 hover:bg-green-700"
                   >
-                    {isCreating ? 'Creating...' : 'Create Project'}
+                    {isCreating ? 'Creating Project...' : 'Create & Save Project'}
                   </Button>
                 </div>
               </CardContent>

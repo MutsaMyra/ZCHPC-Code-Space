@@ -1,5 +1,4 @@
 import { toast } from "sonner";
-import { fileSystemService } from "./fileSystemService";
 
 export type ExecutionMode = 'online' | 'offline';
 export type HardwareType = 'cpu' | 'gpu';
@@ -20,10 +19,10 @@ export interface ExecutionResult {
   errors?: string[];
 }
 
-// Piston API configuration with updated language mappings
+// Piston API configuration with verified language mappings
 const PISTON_API_URL = 'https://emkc.org/api/v2/piston';
 
-// Updated language mappings for Piston API with verified versions
+// Updated and verified language mappings for Piston API
 const PISTON_LANGUAGE_MAP: Record<string, { language: string; version: string; aliases?: string[] }> = {
   javascript: { language: 'javascript', version: '18.15.0', aliases: ['js', 'node'] },
   python: { language: 'python', version: '3.10.0', aliases: ['py', 'python3'] },
@@ -46,12 +45,12 @@ export class ExecutionService {
     // Listen for online/offline events
     window.addEventListener('online', () => {
       this.isOnline = true;
-      toast.info('Connection restored. Switched to online mode.');
+      toast.info('Connection restored. Online execution available.');
     });
     
     window.addEventListener('offline', () => {
       this.isOnline = false;
-      toast.warning('Connection lost. Switched to offline mode.');
+      toast.warning('Connection lost. Using offline simulation.');
     });
   }
   
@@ -107,7 +106,7 @@ export class ExecutionService {
     console.log(`Execution mode: ${effectiveMode}, Online: ${this.isOnline}, Language: ${language}`);
     
     if (!this.isOnline && effectiveMode === 'online') {
-      toast.warning('No internet connection. Falling back to offline execution.');
+      toast.warning('No internet connection. Using offline simulation.');
       return this.executeLocally(code, language, config);
     }
     
@@ -136,7 +135,9 @@ export class ExecutionService {
     }
 
     try {
-      const result = await this.submitToPiston(code, languageConfig, normalizedLanguage);
+      // Pre-process code based on language requirements
+      const processedCode = this.preprocessCode(code, normalizedLanguage);
+      const result = await this.submitToPiston(processedCode, languageConfig, normalizedLanguage);
       console.log('Piston execution result:', result);
       
       const executionTime = (performance.now() - startTime) / 1000;
@@ -146,7 +147,7 @@ export class ExecutionService {
         `[Piston] Language: ${languageConfig.language} v${languageConfig.version}`,
       ];
 
-      // Handle compilation output first
+      // Handle compilation output first (for compiled languages)
       if (result.compile) {
         if (result.compile.stdout && result.compile.stdout.trim()) {
           output.push('--- Compilation Output ---');
@@ -186,9 +187,53 @@ export class ExecutionService {
 
     } catch (error) {
       console.error('Piston execution error:', error);
-      toast.error('Failed to execute on Piston. Falling back to local simulation.');
+      toast.error('Failed to execute on Piston. Using local simulation.');
       return this.executeLocally(code, language, config);
     }
+  }
+
+  private preprocessCode(code: string, language: string): string {
+    // Language-specific preprocessing to ensure compatibility with Piston
+    switch (language) {
+      case 'java':
+        // Ensure Java code has proper class structure
+        if (!code.includes('class') && !code.includes('public class')) {
+          return `public class Main {
+    public static void main(String[] args) {
+        ${code}
+    }
+}`;
+        }
+        break;
+      
+      case 'cpp':
+      case 'c':
+        // Ensure C/C++ code has necessary includes
+        if (!code.includes('#include')) {
+          const includes = language === 'cpp' 
+            ? '#include <iostream>\nusing namespace std;\n\n'
+            : '#include <stdio.h>\n\n';
+          
+          if (!code.includes('main')) {
+            return `${includes}int main() {
+    ${code}
+    return 0;
+}`;
+          } else {
+            return includes + code;
+          }
+        }
+        break;
+      
+      case 'php':
+        // Ensure PHP code has proper opening tags
+        if (!code.trim().startsWith('<?php')) {
+          return `<?php\n${code}`;
+        }
+        break;
+    }
+    
+    return code;
   }
 
   private normalizeLanguage(language: string): string {
@@ -299,31 +344,26 @@ export class ExecutionService {
           return this.executeJavaScript(code, output);
           
         case 'python':
-          output.push('[Local] Simulating Python execution in browser environment');
+          output.push('[Local] Simulating Python execution');
           return this.simulatePythonExecution(code, output);
           
         case 'cpp':
         case 'c':
-          output.push(`[Local] Simulating ${normalizedLanguage.toUpperCase()} execution in browser environment`);
+          output.push(`[Local] Simulating ${normalizedLanguage.toUpperCase()} execution`);
           return this.simulateCppExecution(code, output);
           
         case 'java':
-          output.push('[Local] Simulating Java execution in browser environment');
+          output.push('[Local] Simulating Java execution');
           return this.simulateJavaExecution(code, output);
           
         case 'php':
-          output.push('[Local] Simulating PHP execution in browser environment');
+          output.push('[Local] Simulating PHP execution');
           return this.simulatePhpExecution(code, output);
           
         default:
-          output.push(`[Local] Unsupported language: ${language}`);
-          output.push('Consider using online mode for full language support');
-          return {
-            output,
-            executionTime: 0.1,
-            exitCode: 1,
-            errors: [`Unsupported language: ${language}`]
-          };
+          output.push(`[Local] Language ${language} - Basic simulation`);
+          output.push('Note: For full execution support, use online mode');
+          return this.simulateGenericExecution(code, output, language);
       }
     } catch (error) {
       output.push(`Error: ${error instanceof Error ? error.message : String(error)}`);
@@ -517,6 +557,21 @@ export class ExecutionService {
     
     if (code.includes('function')) {
       output.push('> [Functions defined successfully]');
+    }
+    
+    return {
+      output,
+      executionTime: Math.random() * 0.3 + 0.1,
+      exitCode: 0
+    };
+  }
+  
+  private simulateGenericExecution(code: string, output: string[], language: string): ExecutionResult {
+    output.push(`> [Simulated ${language} execution]`);
+    output.push('> Code processed successfully');
+    
+    if (code.includes('print') || code.includes('echo') || code.includes('cout') || code.includes('System.out')) {
+      output.push('> [Output would appear here in real execution]');
     }
     
     return {
