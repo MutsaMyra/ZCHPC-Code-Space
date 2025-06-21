@@ -1,6 +1,8 @@
+
 import React, { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import LanguageSelector from "./LanguageSelector";
+import WebPreviewButton from "./WebPreviewButton";
 import { Separator } from "@/components/ui/separator";
 import {
   Save,
@@ -25,6 +27,9 @@ interface NavbarProps {
   executionConfig: ExecutionConfig;
   onExecutionConfigChange: (config: ExecutionConfig) => void;
   isOnline: boolean;
+  isWebProject: boolean;
+  isPreviewVisible: boolean;
+  onTogglePreview: () => void;
 }
 
 const Navbar: React.FC<NavbarProps> = ({
@@ -36,6 +41,9 @@ const Navbar: React.FC<NavbarProps> = ({
   executionConfig,
   onExecutionConfigChange,
   isOnline,
+  isWebProject,
+  isPreviewVisible,
+  onTogglePreview,
 }) => {
   const navigate = useNavigate();
   const [isDependencyManagerOpen, setIsDependencyManagerOpen] = useState(false);
@@ -111,6 +119,13 @@ const Navbar: React.FC<NavbarProps> = ({
           <Play className="h-4 w-4 mr-2" />
           {isRunning ? "Running..." : "Run"}
         </Button>
+
+        <WebPreviewButton
+          isWebProject={isWebProject}
+          isPreviewVisible={isPreviewVisible}
+          onTogglePreview={onTogglePreview}
+          language={selectedLanguage}
+        />
 
         <Button
           size="sm"
