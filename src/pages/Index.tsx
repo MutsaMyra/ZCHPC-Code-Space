@@ -14,7 +14,6 @@ import { ExecutionConfig } from '../services/executionService';
 import { fileSystemService } from '../services/fileSystemService';
 import { projectManager } from '../services/projectManager';
 import { webPreviewService } from '../services/webPreviewService';
-import { languages } from '../components/LanguageSelector';
 
 const Index = () => {
   const [selectedFile, setSelectedFile] = useState<FileNode | null>(null);
@@ -44,7 +43,9 @@ const Index = () => {
       setFiles(currentProject.files);
       setSelectedLanguage(currentProject.metadata.language);
       
-      const isWebProject = webPreviewService.isWebProject(currentProject.metadata.language, currentProject.metadata.framework);
+      // Check if it's a web project by looking at language and framework
+      const isWebProject = ['javascript', 'typescript'].includes(currentProject.metadata.language) && 
+        ['React', 'Vue', 'Svelte', 'Vanilla'].includes(currentProject.metadata.framework || '');
       setShowWebPreview(isWebProject);
       
       if (currentProject.files.length > 0) {
@@ -99,7 +100,8 @@ const Index = () => {
     
     const currentProject = projectManager.getCurrentProject();
     if (currentProject) {
-      const isWebProject = webPreviewService.isWebProject(language, currentProject.metadata.framework);
+      const isWebProject = ['javascript', 'typescript'].includes(language) && 
+        ['React', 'Vue', 'Svelte', 'Vanilla'].includes(currentProject.metadata.framework || '');
       setShowWebPreview(isWebProject);
     }
   };
@@ -176,7 +178,9 @@ const Index = () => {
                 files={files}
                 selectedFile={selectedFile}
                 onFileSelect={setSelectedFile}
-                onFileChange={(newFiles) => setFiles(newFiles)}
+                onFilesChange={(newFiles) => setFiles(newFiles)}
+                selectedLanguage={selectedLanguage}
+                isOnline={isOnline}
               />
               
               <div className="p-2 border-t border-editor-border">
@@ -225,8 +229,11 @@ const Index = () => {
                   <ResizablePanel defaultSize={60}>
                     <WebPreview
                       files={files}
-                      selectedLanguage={selectedLanguage}
+                      selectedFile={selectedFile}
+                      language={selectedLanguage}
                       framework={projectManager.getCurrentProject()?.metadata.framework || 'Vanilla'}
+                      isVisible={showWebPreview}
+                      onToggleVisibility={() => setShowWebPreview(!showWebPreview)}
                     />
                   </ResizablePanel>
                   <ResizableHandle />
@@ -235,10 +242,11 @@ const Index = () => {
               
               <ResizablePanel defaultSize={showWebPreview ? 40 : 100}>
                 <TerminalPanel
-                  output={terminalOutput}
+                  terminalOutput={terminalOutput}
                   onClear={clearTerminal}
                   isRunning={isRunning}
-                  activityLog={activityLog}
+                  executionConfig={executionConfig}
+                  isOnline={isOnline}
                 />
               </ResizablePanel>
             </ResizablePanelGroup>
@@ -248,8 +256,9 @@ const Index = () => {
       
       <SaveLocationPrompt
         isOpen={showSavePrompt}
-        onSetLocation={handleSaveLocationSetup}
-        onDismiss={() => setShowSavePrompt(false)}
+        onClose={() => setShowSavePrompt(false)}
+        onSaveLocationSet={handleSaveLocationSetup}
+        projectName={projectManager.getCurrentProject()?.metadata.name || 'Untitled Project'}
       />
     </div>
   );

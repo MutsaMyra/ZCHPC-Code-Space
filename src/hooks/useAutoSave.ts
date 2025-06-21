@@ -1,91 +1,104 @@
 
-import { useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { toast } from 'sonner';
-import { projectManager } from '../services/projectManager';
 import { FileNode } from '../components/FileExplorer';
+import { localFileSystemService } from '../services/localFileSystemService';
 
-interface UseAutoSaveOptions {
-  enabled: boolean;
-  delay: number; // milliseconds
-  onSave?: () => void;
+export interface ActivityLogEntry {
+  timestamp: Date;
+  message: string;
+  type: 'save' | 'error' | 'info';
 }
 
-export const useAutoSave = (
-  files: FileNode[],
-  projectId: string | null,
-  options: UseAutoSaveOptions = { enabled: true, delay: 2000 }
-) => {
-  const timeoutRef = useRef<NodeJS.Timeout>();
-  const lastSavedRef = useRef<string>('');
-  const isSavingRef = useRef(false);
-
-  const saveFiles = useCallback(async () => {
-    if (!projectId || !files || isSavingRef.current) return;
-
-    const currentState = JSON.stringify(files);
-    if (currentState === lastSavedRef.current) return;
-
-    isSavingRef.current = true;
-    
-    try {
-      projectManager.updateProjectFiles(projectId, files);
-      lastSavedRef.current = currentState;
-      
-      // Show a subtle save indicator
-      toast.success('Auto-saved', {
-        duration: 1000,
-        position: 'bottom-right',
-      });
-      
-      options.onSave?.();
-    } catch (error) {
-      console.error('Auto-save failed:', error);
-      toast.error('Auto-save failed');
-    } finally {
-      isSavingRef.current = false;
-    }
-  }, [files, projectId, options]);
-
-  const debouncedSave = useCallback(() => {
-    if (!options.enabled) return;
-    
-    if (timeoutRef.current) {
-      clearTimeout(timeoutRef.current);
-    }
-    
-    timeoutRef.current = setTimeout(saveFiles, options.delay);
-  }, [saveFiles, options.enabled, options.delay]);
+export const useAutoSave = () => {
+  const [isConfigured, setIsConfigured] = useState(false);
+  const [activityLog, setActivityLog] = useState<ActivityLogEntry[]>([]);
+  const pendingChangesRef = useRef(false);
 
   useEffect(() => {
-    if (options.enabled && files && projectId) {
-      debouncedSave();
-    }
-    
-    return () => {
-      if (timeoutRef.current) {
-        clearTimeout(timeoutRef.current);
-      }
-    };
-  }, [files, debouncedSave, options.enabled, projectId]);
-
-  // Cleanup on unmount
-  useEffect(() => {
-    return () => {
-      if (timeoutRef.current) {
-        clearTimeout(timeoutRef.current);
-      }
-    };
+    setIsConfigured(localFileSystemService.hasSaveLocation());
   }, []);
 
-  const forceSave = useCallback(() => {
-    if (timeoutRef.current) {
-      clearTimeout(timeoutRef.current);
+  const saveFile = useCallback(async (file: FileNode) => {
+    if (!file.content) return;
+    
+    try {
+      const success = await localFileSystemService.saveFile(file.name, file.content);
+      if (success) {
+        const logEntry: ActivityLogEntry = {
+          timestamp: new Date(),
+          message: `Saved ${file.name}`,
+          type: 'save'
+        };
+        setActivityLog(prev => [logEntry, ...prev].slice(0, 50));
+        toast.success(`File saved: ${file.name}`);
+      }
+    } catch (error) {
+      const logEntry: ActivityLogEntry = {
+        timestamp: new Date(),
+        message: `Failed to save ${file.name}: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        type: 'error'
+      };
+      setActivityLog(prev => [logEntry, ...prev].slice(0, 50));
+      toast.error(`Failed to save ${file.name}`);
     }
-    saveFiles();
-  }, [saveFiles]);
+  }, []);
+
+  const saveProject = useCallback(async (files: FileNode[], projectName: string) => {
+    try {
+      const success = await localFileSystemService.saveProject(files, projectName);
+      if (success) {
+        const logEntry: ActivityLogEntry = {
+          timestamp: new Date(),
+          message: `Saved project: ${projectName}`,
+          type: 'save'
+        };
+        setActivityLog(prev => [logEntry, ...prev].slice(0, 50));
+      }
+    } catch (error) {
+      const logEntry: ActivityLogEntry = {
+        timestamp: new Date(),
+        message: `Failed to save project: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        type: 'error'
+      };
+      setActivityLog(prev => [logEntry, ...prev].slice(0, 50));
+    }
+  }, []);
+
+  const configureSaveLocation = useCallback(async () => {
+    try {
+      const success = await localFileSystemService.promptForSaveLocation();
+      if (success) {
+        setIsConfigured(true);
+        const logEntry: ActivityLogEntry = {
+          timestamp: new Date(),
+          message: 'Save location configured',
+          type: 'info'
+        };
+        setActivityLog(prev => [logEntry, ...prev].slice(0, 50));
+      }
+      return success;
+    } catch (error) {
+      const logEntry: ActivityLogEntry = {
+        timestamp: new Date(),
+        message: `Failed to configure save location: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        type: 'error'
+      };
+      setActivityLog(prev => [logEntry, ...prev].slice(0, 50));
+      return false;
+    }
+  }, []);
+
+  const markPendingChanges = useCallback(() => {
+    pendingChangesRef.current = true;
+  }, []);
 
   return {
-    forceSave,
-    isSaving: isSavingRef.current,
+    saveFile,
+    saveProject,
+    configureSaveLocation,
+    isConfigured,
+    markPendingChanges,
+    activityLog
   };
 };

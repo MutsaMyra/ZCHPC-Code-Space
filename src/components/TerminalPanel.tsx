@@ -9,7 +9,7 @@ interface TerminalPanelProps {
   isRunning: boolean;
   executionConfig: ExecutionConfig;
   isOnline: boolean;
-  onClearTerminal?: () => void;
+  onClear?: () => void;
 }
 
 const TerminalPanel: React.FC<TerminalPanelProps> = ({ 
@@ -17,7 +17,7 @@ const TerminalPanel: React.FC<TerminalPanelProps> = ({
   isRunning, 
   executionConfig,
   isOnline,
-  onClearTerminal
+  onClear
 }) => {
   const effectiveMode = !isOnline ? 'offline' : executionConfig.mode;
   
@@ -43,7 +43,7 @@ const TerminalPanel: React.FC<TerminalPanelProps> = ({
         <Terminal 
           output={terminalOutput} 
           isRunning={isRunning}
-          onClear={onClearTerminal}
+          onClear={onClear}
         />
       </div>
     </div>
