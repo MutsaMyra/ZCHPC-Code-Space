@@ -1,4 +1,3 @@
-
 export interface ProjectMetadata {
   id: string;
   name: string;
@@ -8,6 +7,7 @@ export interface ProjectMetadata {
   createdAt: Date;
   lastModified: Date;
   description?: string;
+  projectType: 'vanilla' | 'framework';
 }
 
 export interface Project {
@@ -35,7 +35,8 @@ class ProjectManager {
     name: string,
     language: string,
     framework: string,
-    dependencies: string[] = []
+    dependencies: string[] = [],
+    projectType: 'vanilla' | 'framework' = 'vanilla'
   ): Project {
     const projectId = `project_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
     
@@ -47,9 +48,10 @@ class ProjectManager {
       dependencies,
       createdAt: new Date(),
       lastModified: new Date(),
+      projectType,
     };
 
-    const files = this.generateProjectStructure(language, framework, dependencies);
+    const files = this.generateProjectStructure(language, framework, dependencies, projectType);
     
     const project: Project = {
       metadata,
@@ -99,28 +101,184 @@ class ProjectManager {
     }
   }
 
-  private generateProjectStructure(language: string, framework: string, dependencies: string[]): any[] {
-    // Basic project structure based on language/framework
-    const templates = {
-      javascript: () => [
+  private generateProjectStructure(language: string, framework: string, dependencies: string[], projectType: 'vanilla' | 'framework'): any[] {
+    if (projectType === 'vanilla') {
+      return this.generateVanillaProject(language, dependencies);
+    } else {
+      return this.generateFrameworkProject(language, framework, dependencies);
+    }
+  }
+
+  private generateVanillaProject(language: string, dependencies: string[]): any[] {
+    switch (language) {
+      case 'javascript':
+        return [
+          {
+            id: 'main.js',
+            name: 'main.js',
+            type: 'file',
+            extension: '.js',
+            content: 'console.log("Hello, World!");'
+          },
+          {
+            id: 'package.json',
+            name: 'package.json',
+            type: 'file',
+            extension: '.json',
+            content: JSON.stringify({
+              name: 'vanilla-js-project',
+              version: '1.0.0',
+              main: 'main.js',
+              dependencies: dependencies.reduce((acc, dep) => ({ ...acc, [dep]: 'latest' }), {})
+            }, null, 2)
+          }
+        ];
+      case 'python':
+        return [
+          {
+            id: 'main.py',
+            name: 'main.py',
+            type: 'file',
+            extension: '.py',
+            content: 'print("Hello, World!")\n\n# Your Python code here'
+          },
+          {
+            id: 'requirements.txt',
+            name: 'requirements.txt',
+            type: 'file',
+            extension: '.txt',
+            content: dependencies.join('\n')
+          }
+        ];
+      case 'php':
+        return [
+          {
+            id: 'index.php',
+            name: 'index.php',
+            type: 'file',
+            extension: '.php',
+            content: '<?php\necho "Hello, World!";\n?>'
+          },
+          {
+            id: 'composer.json',
+            name: 'composer.json',
+            type: 'file',
+            extension: '.json',
+            content: JSON.stringify({
+              name: 'vanilla-php-project',
+              require: dependencies.reduce((acc, dep) => ({ ...acc, [dep]: '^1.0' }), {})
+            }, null, 2)
+          }
+        ];
+      case 'cpp':
+        return [
+          {
+            id: 'main.cpp',
+            name: 'main.cpp',
+            type: 'file',
+            extension: '.cpp',
+            content: '#include <iostream>\n\nint main() {\n    std::cout << "Hello, World!" << std::endl;\n    return 0;\n}'
+          }
+        ];
+      case 'java':
+        return [
+          {
+            id: 'Main.java',
+            name: 'Main.java',
+            type: 'file',
+            extension: '.java',
+            content: 'public class Main {\n    public static void main(String[] args) {\n        System.out.println("Hello, World!");\n    }\n}'
+          }
+        ];
+      default:
+        return [];
+    }
+  }
+
+  private generateFrameworkProject(language: string, framework: string, dependencies: string[]): any[] {
+    if (language === 'javascript' && framework === 'React') {
+      return [
+        {
+          id: 'public',
+          name: 'public',
+          type: 'folder',
+          children: [
+            {
+              id: 'index.html',
+              name: 'index.html',
+              type: 'file',
+              extension: '.html',
+              content: `<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>React App</title>
+</head>
+<body>
+    <div id="root"></div>
+</body>
+</html>`
+            }
+          ]
+        },
         {
           id: 'src',
           name: 'src',
           type: 'folder',
           children: [
             {
+              id: 'App.js',
+              name: 'App.js',
+              type: 'file',
+              extension: '.js',
+              content: `import React from 'react';
+import './App.css';
+
+function App() {
+  return (
+    <div className="App">
+      <header className="App-header">
+        <h1>Welcome to React</h1>
+        <p>Edit src/App.js and save to reload.</p>
+      </header>
+    </div>
+  );
+}
+
+export default App;`
+            },
+            {
+              id: 'App.css',
+              name: 'App.css',
+              type: 'file',
+              extension: '.css',
+              content: `.App {
+  text-align: center;
+}
+
+.App-header {
+  background-color: #282c34;
+  padding: 20px;
+  color: white;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}`
+            },
+            {
               id: 'index.js',
               name: 'index.js',
               type: 'file',
               extension: '.js',
-              content: 'console.log("Hello, World!");'
-            },
-            {
-              id: 'app.js',
-              name: 'app.js',
-              type: 'file',
-              extension: '.js',
-              content: '// Your React app code here\nimport React from "react";\n\nfunction App() {\n  return <div>Hello React!</div>;\n}\n\nexport default App;'
+              content: `import React from 'react';
+import ReactDOM from 'react-dom/client';
+import App from './App';
+
+const root = ReactDOM.createRoot(document.getElementById('root'));
+root.render(<App />);`
             }
           ]
         },
@@ -130,59 +288,111 @@ class ProjectManager {
           type: 'file',
           extension: '.json',
           content: JSON.stringify({
-            name: 'my-project',
+            name: 'react-app',
             version: '1.0.0',
-            dependencies: dependencies.reduce((acc, dep) => ({ ...acc, [dep]: 'latest' }), {})
+            dependencies: {
+              react: '^18.0.0',
+              'react-dom': '^18.0.0',
+              ...dependencies.reduce((acc, dep) => ({ ...acc, [dep]: 'latest' }), {})
+            },
+            scripts: {
+              start: 'react-scripts start',
+              build: 'react-scripts build'
+            }
           }, null, 2)
         }
-      ],
-      python: () => [
+      ];
+    } else if (language === 'python' && framework === 'Django') {
+      return [
         {
-          id: 'main.py',
-          name: 'main.py',
+          id: 'manage.py',
+          name: 'manage.py',
           type: 'file',
           extension: '.py',
-          content: 'print("Hello, World!")\n\n# Your Python code here'
+          content: `#!/usr/bin/env python
+import os
+import sys
+
+if __name__ == '__main__':
+    os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'myproject.settings')
+    try:
+        from django.core.management import execute_from_command_line
+    except ImportError as exc:
+        raise ImportError(
+            "Couldn't import Django. Are you sure it's installed and "
+            "available on your PYTHONPATH environment variable? Did you "
+            "forget to activate a virtual environment?"
+        ) from exc
+    execute_from_command_line(sys.argv)`
+        },
+        {
+          id: 'myproject',
+          name: 'myproject',
+          type: 'folder',
+          children: [
+            {
+              id: 'settings.py',
+              name: 'settings.py',
+              type: 'file',
+              extension: '.py',
+              content: `import os
+from pathlib import Path
+
+BASE_DIR = Path(__file__).resolve().parent.parent
+
+SECRET_KEY = 'your-secret-key-here'
+DEBUG = True
+ALLOWED_HOSTS = []
+
+INSTALLED_APPS = [
+    'django.contrib.admin',
+    'django.contrib.auth',
+    'django.contrib.contenttypes',
+    'django.contrib.sessions',
+    'django.contrib.messages',
+    'django.contrib.staticfiles',
+]
+
+ROOT_URLCONF = 'myproject.urls'
+
+DATABASES = {
+    'default': {
+        'ENGINE': 'django.db.backends.sqlite3',
+        'NAME': BASE_DIR / 'db.sqlite3',
+    }
+}`
+            },
+            {
+              id: 'urls.py',
+              name: 'urls.py',
+              type: 'file',
+              extension: '.py',
+              content: `from django.contrib import admin
+from django.urls import path
+from django.http import HttpResponse
+
+def home(request):
+    return HttpResponse("Hello, Django!")
+
+urlpatterns = [
+    path('admin/', admin.site.urls),
+    path('', home, name='home'),
+]`
+            }
+          ]
         },
         {
           id: 'requirements.txt',
           name: 'requirements.txt',
           type: 'file',
           extension: '.txt',
-          content: dependencies.join('\n')
+          content: ['django>=4.0', ...dependencies].join('\n')
         }
-      ],
-      php: () => [
-        {
-          id: 'index.php',
-          name: 'index.php',
-          type: 'file',
-          extension: '.php',
-          content: '<?php\necho "Hello, World!";\n?>'
-        },
-        {
-          id: 'composer.json',
-          name: 'composer.json',
-          type: 'file',
-          extension: '.json',
-          content: JSON.stringify({
-            name: 'my-project',
-            require: dependencies.reduce((acc, dep) => ({ ...acc, [dep]: '^1.0' }), {})
-          }, null, 2)
-        }
-      ]
-    };
+      ];
+    }
 
-    const generator = templates[language as keyof typeof templates];
-    return generator ? generator() : [
-      {
-        id: 'main',
-        name: `main.${language === 'cpp' ? 'cpp' : language === 'java' ? 'java' : 'txt'}`,
-        type: 'file',
-        extension: `.${language === 'cpp' ? 'cpp' : language === 'java' ? 'java' : 'txt'}`,
-        content: '// Hello World program'
-      }
-    ];
+    // Fallback to vanilla project if framework is not supported
+    return this.generateVanillaProject(language, dependencies);
   }
 
   private saveProjects(): void {

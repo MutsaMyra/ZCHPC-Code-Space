@@ -1,5 +1,4 @@
 import { toast } from "sonner";
-import { fileSystemService } from "./fileSystemService";
 
 export type ExecutionMode = 'online' | 'offline';
 export type HardwareType = 'cpu' | 'gpu';
@@ -20,22 +19,22 @@ export interface ExecutionResult {
   errors?: string[];
 }
 
-// Piston API configuration
+// Piston API configuration with verified language mappings
 const PISTON_API_URL = 'https://emkc.org/api/v2/piston';
 
-// Language mappings for Piston API
-const PISTON_LANGUAGE_MAP: Record<string, { language: string; version: string }> = {
-  javascript: { language: 'javascript', version: '18.15.0' }, // Node.js
-  python: { language: 'python', version: '3.10.0' },
-  cpp: { language: 'cpp', version: '10.2.0' },
+// Updated and verified language mappings for Piston API
+const PISTON_LANGUAGE_MAP: Record<string, { language: string; version: string; aliases?: string[] }> = {
+  javascript: { language: 'javascript', version: '18.15.0', aliases: ['js', 'node'] },
+  python: { language: 'python', version: '3.10.0', aliases: ['py', 'python3'] },
+  cpp: { language: 'cpp', version: '10.2.0', aliases: ['c++', 'cxx'] },
   java: { language: 'java', version: '15.0.2' },
   php: { language: 'php', version: '8.2.3' },
   c: { language: 'c', version: '10.2.0' },
-  csharp: { language: 'csharp', version: '6.12.0' },
-  go: { language: 'go', version: '1.16.2' },
-  rust: { language: 'rust', version: '1.68.2' },
-  ruby: { language: 'ruby', version: '3.0.1' },
-  typescript: { language: 'typescript', version: '5.0.3' },
+  csharp: { language: 'csharp', version: '6.12.0', aliases: ['cs', 'c#'] },
+  go: { language: 'go', version: '1.16.2', aliases: ['golang'] },
+  rust: { language: 'rust', version: '1.68.2', aliases: ['rs'] },
+  ruby: { language: 'ruby', version: '3.0.1', aliases: ['rb'] },
+  typescript: { language: 'typescript', version: '5.0.3', aliases: ['ts'] },
 };
 
 export class ExecutionService {
@@ -46,12 +45,12 @@ export class ExecutionService {
     // Listen for online/offline events
     window.addEventListener('online', () => {
       this.isOnline = true;
-      toast.info('Connection restored. Switched to online mode.');
+      toast.info('Connection restored. Online execution available.');
     });
     
     window.addEventListener('offline', () => {
       this.isOnline = false;
-      toast.warning('Connection lost. Switched to offline mode.');
+      toast.warning('Connection lost. Using offline simulation.');
     });
   }
   
@@ -69,6 +68,31 @@ export class ExecutionService {
   public getConnectionStatus(): boolean {
     return this.isOnline;
   }
+
+  public async getSupportedLanguages(): Promise<any[]> {
+    if (!this.isOnline) {
+      return Object.keys(PISTON_LANGUAGE_MAP).map(lang => ({
+        language: lang,
+        version: PISTON_LANGUAGE_MAP[lang].version,
+        aliases: PISTON_LANGUAGE_MAP[lang].aliases || []
+      }));
+    }
+
+    try {
+      const response = await fetch(`${PISTON_API_URL}/runtimes`);
+      if (response.ok) {
+        return await response.json();
+      }
+    } catch (error) {
+      console.error('Failed to fetch supported languages:', error);
+    }
+    
+    return Object.keys(PISTON_LANGUAGE_MAP).map(lang => ({
+      language: lang,
+      version: PISTON_LANGUAGE_MAP[lang].version,
+      aliases: PISTON_LANGUAGE_MAP[lang].aliases || []
+    }));
+  }
   
   public async executeCode(
     code: string, 
@@ -79,10 +103,10 @@ export class ExecutionService {
       ? this.getRecommendedMode() 
       : config.mode;
     
-    console.log(`Execution mode: ${effectiveMode}, Online: ${this.isOnline}`);
+    console.log(`Execution mode: ${effectiveMode}, Online: ${this.isOnline}, Language: ${language}`);
     
     if (!this.isOnline && effectiveMode === 'online') {
-      toast.warning('No internet connection. Falling back to offline execution.');
+      toast.warning('No internet connection. Using offline simulation.');
       return this.executeLocally(code, language, config);
     }
     
@@ -102,14 +126,18 @@ export class ExecutionService {
     
     console.log(`Executing on Piston with language: ${language}`);
 
-    const languageConfig = PISTON_LANGUAGE_MAP[language];
+    const normalizedLanguage = this.normalizeLanguage(language);
+    const languageConfig = PISTON_LANGUAGE_MAP[normalizedLanguage];
+    
     if (!languageConfig) {
       toast.error(`Language ${language} not supported by Piston. Using local simulation.`);
       return this.executeLocally(code, language, config);
     }
 
     try {
-      const result = await this.submitToPiston(code, languageConfig);
+      // Pre-process code based on language requirements
+      const processedCode = this.preprocessCode(code, normalizedLanguage);
+      const result = await this.submitToPiston(processedCode, languageConfig, normalizedLanguage);
       console.log('Piston execution result:', result);
       
       const executionTime = (performance.now() - startTime) / 1000;
@@ -119,47 +147,117 @@ export class ExecutionService {
         `[Piston] Language: ${languageConfig.language} v${languageConfig.version}`,
       ];
 
-      if (result.run && result.run.stdout) {
-        output.push('--- Output ---');
-        output.push(result.run.stdout.trim());
+      // Handle compilation output first (for compiled languages)
+      if (result.compile) {
+        if (result.compile.stdout && result.compile.stdout.trim()) {
+          output.push('--- Compilation Output ---');
+          output.push(result.compile.stdout.trim());
+        }
+        if (result.compile.stderr && result.compile.stderr.trim()) {
+          output.push('--- Compilation Errors ---');
+          output.push(result.compile.stderr.trim());
+        }
       }
 
-      if (result.run && result.run.stderr) {
-        output.push('--- Errors ---');
-        output.push(result.run.stderr.trim());
-      }
-
-      if (result.compile && result.compile.stdout) {
-        output.push('--- Compilation Output ---');
-        output.push(result.compile.stdout.trim());
-      }
-
-      if (result.compile && result.compile.stderr) {
-        output.push('--- Compilation Errors ---');
-        output.push(result.compile.stderr.trim());
+      // Handle runtime output
+      if (result.run) {
+        if (result.run.stdout && result.run.stdout.trim()) {
+          output.push('--- Program Output ---');
+          output.push(result.run.stdout.trim());
+        }
+        if (result.run.stderr && result.run.stderr.trim()) {
+          output.push('--- Runtime Errors ---');
+          output.push(result.run.stderr.trim());
+        }
       }
 
       const exitCode = result.run ? result.run.code : (result.compile ? result.compile.code : 1);
       output.push(`[Piston] Exit code: ${exitCode}`);
 
+      const errors = [];
+      if (result.compile?.stderr) errors.push(result.compile.stderr);
+      if (result.run?.stderr) errors.push(result.run.stderr);
+
       return {
         output,
         executionTime,
         exitCode: exitCode || 0,
-        errors: result.run?.stderr || result.compile?.stderr ? 
-          [result.run?.stderr || result.compile?.stderr].filter(Boolean) : undefined
+        errors: errors.length > 0 ? errors : undefined
       };
 
     } catch (error) {
       console.error('Piston execution error:', error);
-      toast.error('Failed to execute on Piston. Falling back to local simulation.');
+      toast.error('Failed to execute on Piston. Using local simulation.');
       return this.executeLocally(code, language, config);
     }
   }
 
+  private preprocessCode(code: string, language: string): string {
+    // Language-specific preprocessing to ensure compatibility with Piston
+    switch (language) {
+      case 'java':
+        // Ensure Java code has proper class structure
+        if (!code.includes('class') && !code.includes('public class')) {
+          return `public class Main {
+    public static void main(String[] args) {
+        ${code}
+    }
+}`;
+        }
+        break;
+      
+      case 'cpp':
+      case 'c':
+        // Ensure C/C++ code has necessary includes
+        if (!code.includes('#include')) {
+          const includes = language === 'cpp' 
+            ? '#include <iostream>\nusing namespace std;\n\n'
+            : '#include <stdio.h>\n\n';
+          
+          if (!code.includes('main')) {
+            return `${includes}int main() {
+    ${code}
+    return 0;
+}`;
+          } else {
+            return includes + code;
+          }
+        }
+        break;
+      
+      case 'php':
+        // Ensure PHP code has proper opening tags
+        if (!code.trim().startsWith('<?php')) {
+          return `<?php\n${code}`;
+        }
+        break;
+    }
+    
+    return code;
+  }
+
+  private normalizeLanguage(language: string): string {
+    const normalized = language.toLowerCase();
+    
+    // Check direct match
+    if (PISTON_LANGUAGE_MAP[normalized]) {
+      return normalized;
+    }
+    
+    // Check aliases
+    for (const [lang, config] of Object.entries(PISTON_LANGUAGE_MAP)) {
+      if (config.aliases && config.aliases.includes(normalized)) {
+        return lang;
+      }
+    }
+    
+    return normalized;
+  }
+
   private async submitToPiston(
     code: string, 
-    languageConfig: { language: string; version: string }
+    languageConfig: { language: string; version: string },
+    originalLanguage: string
   ) {
     console.log('Submitting to Piston...', { 
       language: languageConfig.language, 
@@ -167,51 +265,58 @@ export class ExecutionService {
       codeLength: code.length 
     });
     
+    const fileName = this.getFileName(originalLanguage);
+    
+    const requestBody = {
+      language: languageConfig.language,
+      version: languageConfig.version,
+      files: [
+        {
+          name: fileName,
+          content: code,
+        },
+      ],
+      stdin: '',
+      args: [],
+      compile_timeout: 10000,
+      run_timeout: 5000,
+      compile_memory_limit: -1,
+      run_memory_limit: -1,
+    };
+
+    console.log('Piston request body:', requestBody);
+    
     const response = await fetch(`${PISTON_API_URL}/execute`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({
-        language: languageConfig.language,
-        version: languageConfig.version,
-        files: [
-          {
-            name: `main.${this.getFileExtension(languageConfig.language)}`,
-            content: code,
-          },
-        ],
-        stdin: '',
-        args: [],
-        compile_timeout: 10000,
-        run_timeout: 3000,
-        compile_memory_limit: -1,
-        run_memory_limit: -1,
-      }),
+      body: JSON.stringify(requestBody),
     });
 
     if (!response.ok) {
-      throw new Error(`Piston execution failed: ${response.status} ${response.statusText}`);
+      const errorText = await response.text();
+      throw new Error(`Piston execution failed: ${response.status} ${response.statusText} - ${errorText}`);
     }
 
     return await response.json();
   }
 
-  private getFileExtension(language: string): string {
-    const extensions: Record<string, string> = {
-      'javascript': 'js',
-      'python': 'py',
-      'cpp': 'cpp',
-      'java': 'java',
-      'php': 'php',
-      'c': 'c',
-      'csharp': 'cs',
-      'go': 'go',
-      'rust': 'rs',
-      'ruby': 'rb',
-      'typescript': 'ts',
+  private getFileName(language: string): string {
+    const fileNames: Record<string, string> = {
+      'javascript': 'main.js',
+      'python': 'main.py',
+      'cpp': 'main.cpp',
+      'java': 'Main.java',
+      'php': 'main.php',
+      'c': 'main.c',
+      'csharp': 'Main.cs',
+      'go': 'main.go',
+      'rust': 'main.rs',
+      'ruby': 'main.rb',
+      'typescript': 'main.ts',
     };
-    return extensions[language] || 'txt';
+    return fileNames[language] || `main.${language}`;
   }
   
   private async executeLocally(
@@ -231,36 +336,34 @@ export class ExecutionService {
     await new Promise(resolve => setTimeout(resolve, 800));
     
     try {
-      switch (language) {
+      const normalizedLanguage = this.normalizeLanguage(language);
+      
+      switch (normalizedLanguage) {
         case 'javascript':
           output.push('[Local] Browser JavaScript environment');
           return this.executeJavaScript(code, output);
           
         case 'python':
-          output.push('[Local] Simulating Python execution in browser environment');
+          output.push('[Local] Simulating Python execution');
           return this.simulatePythonExecution(code, output);
           
         case 'cpp':
-          output.push('[Local] Simulating C++ execution in browser environment');
+        case 'c':
+          output.push(`[Local] Simulating ${normalizedLanguage.toUpperCase()} execution`);
           return this.simulateCppExecution(code, output);
           
         case 'java':
-          output.push('[Local] Simulating Java execution in browser environment');
+          output.push('[Local] Simulating Java execution');
           return this.simulateJavaExecution(code, output);
           
         case 'php':
-          output.push('[Local] Simulating PHP execution in browser environment');
+          output.push('[Local] Simulating PHP execution');
           return this.simulatePhpExecution(code, output);
           
         default:
-          output.push(`[Local] Unsupported language: ${language}`);
-          output.push('Consider using online mode for full language support');
-          return {
-            output,
-            executionTime: 0.1,
-            exitCode: 1,
-            errors: [`Unsupported language: ${language}`]
-          };
+          output.push(`[Local] Language ${language} - Basic simulation`);
+          output.push('Note: For full execution support, use online mode');
+          return this.simulateGenericExecution(code, output, language);
       }
     } catch (error) {
       output.push(`Error: ${error instanceof Error ? error.message : String(error)}`);
@@ -454,6 +557,21 @@ export class ExecutionService {
     
     if (code.includes('function')) {
       output.push('> [Functions defined successfully]');
+    }
+    
+    return {
+      output,
+      executionTime: Math.random() * 0.3 + 0.1,
+      exitCode: 0
+    };
+  }
+  
+  private simulateGenericExecution(code: string, output: string[], language: string): ExecutionResult {
+    output.push(`> [Simulated ${language} execution]`);
+    output.push('> Code processed successfully');
+    
+    if (code.includes('print') || code.includes('echo') || code.includes('cout') || code.includes('System.out')) {
+      output.push('> [Output would appear here in real execution]');
     }
     
     return {

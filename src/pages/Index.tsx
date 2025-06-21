@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Navbar from '../components/Navbar';
@@ -9,6 +10,8 @@ import { useCodeExecution } from '../hooks/useCodeExecution';
 import { useAutoSave } from '../hooks/useAutoSave';
 import { toast } from 'sonner';
 import SyncStatusIndicator from '../components/SyncStatusIndicator';
+import SaveLocationPrompt from '../components/SaveLocationPrompt';
+import WebPreview from '../components/WebPreview';
 
 // Import the refactored components
 import FileExplorerPanel from '../components/FileExplorerPanel';
@@ -23,6 +26,10 @@ const Index = () => {
   const [editorContent, setEditorContent] = useState<string>('');
   const [isOnline, setIsOnline] = useState(navigator.onLine);
   const [currentProjectId, setCurrentProjectId] = useState<string | null>(null);
+  const [currentProjectName, setCurrentProjectName] = useState<string>('');
+  const [showSavePrompt, setShowSavePrompt] = useState(false);
+  const [saveLocationSet, setSaveLocationSet] = useState(false);
+  const [webPreviewVisible, setWebPreviewVisible] = useState(false);
   const [executionConfig, setExecutionConfig] = useState<ExecutionConfig>({
     mode: navigator.onLine ? 'online' : 'offline',
     hardware: 'cpu',
@@ -55,6 +62,7 @@ const Index = () => {
     }
     
     setCurrentProjectId(currentProject.metadata.id);
+    setCurrentProjectName(currentProject.metadata.name);
     setFiles(currentProject.files);
     setSelectedLanguage(currentProject.metadata.language);
     
@@ -64,7 +72,16 @@ const Index = () => {
       setSelectedFile(firstFile);
       setEditorContent(firstFile.content || '');
     }
-  }, [navigate]);
+
+    // Show save location prompt after 2 minutes if not set
+    const timer = setTimeout(() => {
+      if (!saveLocationSet) {
+        setShowSavePrompt(true);
+      }
+    }, 2 * 60 * 1000); // 2 minutes
+
+    return () => clearTimeout(timer);
+  }, [navigate, saveLocationSet]);
 
   // Helper function to find first file in the project
   const findFirstFile = (fileNodes: FileNode[]): FileNode | null => {
@@ -102,6 +119,10 @@ const Index = () => {
       }
     }
   }, [executionConfig.autoDetect, isOnline]);
+
+  // Determine if web preview should be available
+  const isWebProject = selectedLanguage === 'javascript' || 
+    (selectedFile && (selectedFile.extension === '.html' || selectedFile.extension === '.css'));
   
   const handleFileSelect = (file: FileNode) => {
     setSelectedFile(file);
@@ -151,31 +172,24 @@ const Index = () => {
   const handleRunCodeCell = async (code: string) => {
     if (!code.trim()) return;
     
-    // TODO: Implement cell-specific execution
-    // This will need to be enhanced to support:
-    // 1. Maintaining kernel state between cell executions
-    // 2. Variable persistence across cells
-    // 3. Proper output capturing and display
+    // Create a temporary file node for the cell code
+    const tempFile: FileNode = {
+      id: 'temp-cell',
+      name: 'temp.py',
+      type: 'file',
+      content: code
+    };
     
-    // For now, use the existing execution service
-    return new Promise<void>((resolve, reject) => {
-      // Create a temporary file node for the cell code
-      const tempFile: FileNode = {
-        id: 'temp-cell',
-        name: 'temp.py',
-        type: 'file',
-        content: code
-      };
-      
-      runCode(tempFile, selectedLanguage, executionConfig, isOnline)
-        .then(() => resolve())
-        .catch(() => reject(new Error('Cell execution failed')));
-    });
+    return runCode(tempFile, selectedLanguage, executionConfig, isOnline);
   };
 
   const handleSave = () => {
     forceSave();
     toast.success('Project saved successfully');
+  };
+
+  const handleSaveLocationSet = () => {
+    setSaveLocationSet(true);
   };
 
   // If no project is loaded, show loading or redirect
@@ -224,7 +238,7 @@ const Index = () => {
         
         <ResizableHandle withHandle className="bg-editor-border" />
         
-        <ResizablePanel defaultSize={85} className="bg-editor flex flex-col overflow-hidden">
+        <ResizablePanel defaultSize={isWebProject && webPreviewVisible ? 60 : 85} className="bg-editor flex flex-col overflow-hidden">
           <ResizablePanelGroup direction="vertical" className="h-full">
             <ResizablePanel defaultSize={70} minSize={30} className="overflow-hidden">
               <EditorPanel 
@@ -249,7 +263,36 @@ const Index = () => {
             </ResizablePanel>
           </ResizablePanelGroup>
         </ResizablePanel>
+
+        {/* Web Preview Panel */}
+        {isWebProject && (
+          <>
+            <ResizableHandle withHandle className="bg-editor-border" />
+            <ResizablePanel 
+              defaultSize={webPreviewVisible ? 25 : 0} 
+              minSize={webPreviewVisible ? 20 : 0}
+              maxSize={webPreviewVisible ? 50 : 0}
+            >
+              <WebPreview
+                files={files}
+                selectedFile={selectedFile}
+                language={selectedLanguage}
+                framework="React"
+                isVisible={webPreviewVisible}
+                onToggleVisibility={() => setWebPreviewVisible(!webPreviewVisible)}
+              />
+            </ResizablePanel>
+          </>
+        )}
       </ResizablePanelGroup>
+
+      {/* Save Location Prompt */}
+      <SaveLocationPrompt
+        isOpen={showSavePrompt}
+        onClose={() => setShowSavePrompt(false)}
+        onSaveLocationSet={handleSaveLocationSet}
+        projectName={currentProjectName}
+      />
     </div>
   );
 };
