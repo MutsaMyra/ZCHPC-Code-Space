@@ -28,12 +28,21 @@ const PISTON_LANGUAGE_MAP: Record<string, { language: string; version: string; a
   php: { language: 'php', version: '8.2.3' },
   cpp: { language: 'cpp', version: '10.2.0', aliases: ['c++', 'cxx'] },
   python: { language: 'python', version: '3.10.0', aliases: ['py', 'python3'] },
+  ruby: { language: 'ruby', version: '3.0.1', aliases: ['rb'] },
+  c: { language: 'c', version: '10.2.0' },
+  csharp: { language: 'csharp', version: '6.12.0', aliases: ['cs', 'c#'] },
+  go: { language: 'go', version: '1.16.2' },
+  rust: { language: 'rust', version: '1.68.2', aliases: ['rs'] },
+  typescript: { language: 'typescript', version: '4.4.4', aliases: ['ts'] },
 };
 
 export class ExecutionService {
   private static instance: ExecutionService;
   private isOnline: boolean = navigator.onLine;
   private executionCache: Map<string, any> = new Map();
+  private inputBuffer: string[] = [];
+  private inputPromise: Promise<string> | null = null;
+  private inputResolver: ((value: string) => void) | null = null;
   
   private constructor() {
     this.initializeListeners();
@@ -65,6 +74,33 @@ export class ExecutionService {
   public getConnectionStatus(): boolean {
     return this.isOnline;
   }
+
+  // Input handling for interactive programs
+  public provideInput(input: string): void {
+    if (this.inputResolver) {
+      this.inputResolver(input);
+      this.inputResolver = null;
+      this.inputPromise = null;
+    } else {
+      this.inputBuffer.push(input);
+    }
+  }
+
+  private async getInput(prompt?: string): Promise<string> {
+    if (this.inputBuffer.length > 0) {
+      return this.inputBuffer.shift()!;
+    }
+
+    if (prompt) {
+      toast.info(`Input required: ${prompt}`);
+    }
+
+    this.inputPromise = new Promise<string>((resolve) => {
+      this.inputResolver = resolve;
+    });
+
+    return this.inputPromise;
+  }
   
   public async executeCode(
     code: string, 
@@ -75,6 +111,7 @@ export class ExecutionService {
     // Clear cache to ensure fresh execution
     if (forceFresh) {
       this.executionCache.clear();
+      this.inputBuffer = [];
       console.log('Execution cache cleared - ensuring fresh run');
     }
     
@@ -184,7 +221,22 @@ export class ExecutionService {
       
       case 'cpp':
         if (!code.includes('#include')) {
-          const includes = '#include <iostream>\nusing namespace std;\n\n';
+          const includes = '#include <iostream>\n#include <string>\nusing namespace std;\n\n';
+          
+          if (!code.includes('main')) {
+            return `${includes}int main() {
+    ${code}
+    return 0;
+}`;
+          } else {
+            return includes + code;
+          }
+        }
+        break;
+
+      case 'c':
+        if (!code.includes('#include')) {
+          const includes = '#include <stdio.h>\n#include <stdlib.h>\n#include <string.h>\n\n';
           
           if (!code.includes('main')) {
             return `${includes}int main() {
@@ -200,6 +252,22 @@ export class ExecutionService {
       case 'php':
         if (!code.trim().startsWith('<?php')) {
           return `<?php\n${code}`;
+        }
+        break;
+
+      case 'ruby':
+        // Ruby doesn't need special preprocessing
+        break;
+
+      case 'csharp':
+        if (!code.includes('using System') && !code.includes('class')) {
+          return `using System;
+
+public class Program {
+    public static void Main() {
+        ${code}
+    }
+}`;
         }
         break;
     }
@@ -277,7 +345,13 @@ export class ExecutionService {
       'java': 'Main.java',
       'php': 'main.php',
       'cpp': 'main.cpp',
+      'c': 'main.c',
       'python': 'main.py',
+      'ruby': 'main.rb',
+      'csharp': 'Main.cs',
+      'go': 'main.go',
+      'rust': 'main.rs',
+      'typescript': 'main.ts',
     };
     return fileNames[language] || `main.${language}`;
   }
@@ -314,12 +388,21 @@ export class ExecutionService {
           return this.simulatePhpExecution(code, output);
           
         case 'cpp':
-          output.push('[Local] Simulating C++ execution');
+        case 'c':
+          output.push(`[Local] Simulating ${language.toUpperCase()} execution`);
           return this.simulateCppExecution(code, output);
           
         case 'python':
-          output.push('[Local] Simulating Python execution');
+          output.push('[Local] Simulating Python execution with input support');
           return this.simulatePythonExecution(code, output);
+
+        case 'ruby':
+          output.push('[Local] Simulating Ruby execution');
+          return this.simulateRubyExecution(code, output);
+
+        case 'csharp':
+          output.push('[Local] Simulating C# execution');
+          return this.simulateCSharpExecution(code, output);
           
         default:
           output.push(`[Local] Language ${language} - Basic simulation`);
@@ -403,10 +486,23 @@ export class ExecutionService {
   }
   
   private simulatePythonExecution(code: string, output: string[]): ExecutionResult {
+    // Enhanced Python simulation with input() support
     const printRegex = /print\s*\(\s*(?:f?['"]([^'"]*)['"]\s*|([^)]*))(?:\s*,\s*([^)]*))*\s*\)/g;
+    const inputRegex = /input\s*\(\s*(?:['"]([^'"]*)['"]\s*)?\)/g;
+    
     let match;
     let found = false;
     
+    // Handle input() calls
+    let inputMatch;
+    while ((inputMatch = inputRegex.exec(code)) !== null) {
+      found = true;
+      const prompt = inputMatch[1] || 'Enter input:';
+      output.push(`> ${prompt}`);
+      output.push(`> [Waiting for input - use the input field above to provide input]`);
+    }
+    
+    // Handle print() calls
     while ((match = printRegex.exec(code)) !== null) {
       found = true;
       if (match[1]) {
@@ -417,7 +513,7 @@ export class ExecutionService {
     }
     
     if (!found) {
-      output.push(`> [No output. Use print() to see output]`);
+      output.push(`> [No output. Use print() to see output or input() for interactive input]`);
     }
     
     if (code.includes('import ')) {
@@ -438,9 +534,10 @@ export class ExecutionService {
       exitCode: 0
     };
   }
-  
+
   private simulateCppExecution(code: string, output: string[]): ExecutionResult {
     const coutRegex = /cout\s*<<\s*["\']?([^"\'<;]*)["\']?/g;
+    const cinRegex = /cin\s*>>\s*([^;]*)/g;
     let match;
     let found = false;
     
@@ -448,9 +545,15 @@ export class ExecutionService {
       found = true;
       output.push(`> ${match[1]}`);
     }
+
+    while ((match = cinRegex.exec(code)) !== null) {
+      found = true;
+      output.push(`> [Input required for variable: ${match[1]}]`);
+      output.push(`> [Use input field above to provide value]`);
+    }
     
     if (!found) {
-      output.push(`> [No output. Use cout << "text" to see output]`);
+      output.push(`> [No output. Use cout << "text" to see output or cin >> variable for input]`);
     }
     
     if (code.includes('#include')) {
@@ -470,12 +573,18 @@ export class ExecutionService {
   
   private simulateJavaExecution(code: string, output: string[]): ExecutionResult {
     const printlnRegex = /System\.out\.println\s*\(\s*["\']([^"\']*)["\']?\s*\)/g;
+    const scannerRegex = /Scanner\s*.*\.next\w*\(\)/g;
     let match;
     let found = false;
     
     while ((match = printlnRegex.exec(code)) !== null) {
       found = true;
       output.push(`> ${match[1]}`);
+    }
+
+    if (scannerRegex.test(code)) {
+      found = true;
+      output.push(`> [Scanner input detected - use input field above]`);
     }
     
     if (!found) {
@@ -525,12 +634,82 @@ export class ExecutionService {
       exitCode: 0
     };
   }
+
+  private simulateRubyExecution(code: string, output: string[]): ExecutionResult {
+    const putsRegex = /puts\s+["\']([^"\']*)["\']?/g;
+    const getsRegex = /gets/g;
+    let match;
+    let found = false;
+    
+    while ((match = putsRegex.exec(code)) !== null) {
+      found = true;
+      output.push(`> ${match[1]}`);
+    }
+
+    if (getsRegex.test(code)) {
+      found = true;
+      output.push(`> [Input required - use input field above]`);
+    }
+    
+    if (!found) {
+      output.push(`> [No output. Use puts "text" to see output or gets for input]`);
+    }
+    
+    if (code.includes('def ')) {
+      output.push('> [Methods defined successfully]');
+    }
+    
+    if (code.includes('class ')) {
+      output.push('> [Classes defined successfully]');
+    }
+    
+    return {
+      output,
+      executionTime: Math.random() * 0.3 + 0.1,
+      exitCode: 0
+    };
+  }
+
+  private simulateCSharpExecution(code: string, output: string[]): ExecutionResult {
+    const writeLineRegex = /Console\.WriteLine\s*\(\s*["\']([^"\']*)["\']?\s*\)/g;
+    const readLineRegex = /Console\.ReadLine\(\)/g;
+    let match;
+    let found = false;
+    
+    while ((match = writeLineRegex.exec(code)) !== null) {
+      found = true;
+      output.push(`> ${match[1]}`);
+    }
+
+    if (readLineRegex.test(code)) {
+      found = true;
+      output.push(`> [Input required - use input field above]`);
+    }
+    
+    if (!found) {
+      output.push(`> [No output. Use Console.WriteLine("text") to see output]`);
+    }
+    
+    if (code.includes('using System')) {
+      output.push('> [Namespaces imported successfully]');
+    }
+    
+    if (code.includes('public static void Main')) {
+      output.push('> [Program executed with exit code 0]');
+    }
+    
+    return {
+      output,
+      executionTime: Math.random() * 0.3 + 0.1,
+      exitCode: 0
+    };
+  }
   
   private simulateGenericExecution(code: string, output: string[], language: string): ExecutionResult {
     output.push(`> [Simulated ${language} execution - fresh run]`);
     output.push('> Code processed successfully');
     
-    if (code.includes('print') || code.includes('echo') || code.includes('cout') || code.includes('System.out')) {
+    if (code.includes('print') || code.includes('echo') || code.includes('cout') || code.includes('System.out') || code.includes('puts') || code.includes('Console.Write')) {
       output.push('> [Output would appear here in real execution]');
     }
     
