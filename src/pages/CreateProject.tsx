@@ -232,22 +232,19 @@ const CreateProject = () => {
 
     try {
       const projectId = uuidv4();
-      const initialFiles: FileNode[] = [
-        {
-          id: uuidv4(),
-          name: 'main' + languages.find(lang => lang.id === selectedLanguage)!.extensions[0],
-          content: '',
-          type: 'file',
-        }
-      ];
 
-      await projectManager.createProject(
-        projectId,
+      const project = await projectManager.createProject(
         projectName,
         selectedLanguage,
         selectedFramework || 'Vanilla',
-        description
+        [], // dependencies array
+        'vanilla' // projectType
       );
+
+      // Set description separately if the project manager supports it
+      if (description && project.metadata) {
+        project.metadata.description = description;
+      }
 
       toast.success('Project created successfully!');
       navigate(`/editor/${projectId}`);
