@@ -26,7 +26,7 @@ const Index = () => {
   const [showWebPreview, setShowWebPreview] = useState(false);
   
   const { runCode, isRunning, terminalOutput, clearTerminal } = useCodeExecution();
-  const { saveFile, saveProject, configureSaveLocation, isConfigured, markPendingChanges, activityLog } = useAutoSave();
+  const { saveFile, saveProject, configureSaveLocation, setCurrentProject, isConfigured, markPendingChanges, activityLog } = useAutoSave();
   
   const [executionConfig, setExecutionConfig] = useState<ExecutionConfig>({
     mode: 'online',
@@ -42,15 +42,23 @@ const Index = () => {
     if (currentProject) {
       setFiles(currentProject.files);
       setSelectedLanguage(currentProject.metadata.language);
+      setCurrentProject(currentProject.metadata.id);
       
-      // Better web project detection
+      // Check if project has storage location, if not, prompt for it
+      const checkStorageLocation = async () => {
+        const { projectStorageService } = await import('../services/projectStorageService');
+        if (!projectStorageService.hasProjectLocation(currentProject.metadata.id)) {
+          setShowSavePrompt(true);
+        }
+      };
+      checkStorageLocation();
+      
       const isWebProject = isWebProjectType(
         currentProject.metadata.language, 
         currentProject.metadata.framework
       );
       setShowWebPreview(isWebProject);
       
-      // Set web preview context
       webPreviewService.setProjectContext(
         currentProject.metadata.language, 
         currentProject.metadata.framework || 'Vanilla'
@@ -62,7 +70,7 @@ const Index = () => {
     } else {
       setFiles(fileSystemService.getFiles());
     }
-  }, []);
+  }, [setCurrentProject]);
 
   useEffect(() => {
     const handleOnline = () => setIsOnline(true);
@@ -77,31 +85,13 @@ const Index = () => {
     };
   }, []);
 
-  useEffect(() => {
-    if (!isConfigured) {
-      const timer = setTimeout(() => {
-        setShowSavePrompt(true);
-      }, 5 * 60 * 1000);
-      
-      setSavePromptTimer(timer);
-      
-      return () => {
-        if (timer) clearTimeout(timer);
-      };
-    }
-  }, [isConfigured]);
+  // Remove the old save prompt timer effect since we handle it differently now
 
   useEffect(() => {
     if (selectedFile && selectedFile.content) {
-      markPendingChanges();
-      
-      const autoSaveTimer = setTimeout(() => {
-        saveFile(selectedFile);
-      }, 30000);
-      
-      return () => clearTimeout(autoSaveTimer);
+      markPendingChanges(selectedFile);
     }
-  }, [selectedFile, markPendingChanges, saveFile]);
+  }, [selectedFile, markPendingChanges]);
 
   const handleLanguageChange = (language: string) => {
     setSelectedLanguage(language);
@@ -146,23 +136,22 @@ const Index = () => {
   };
 
   const handleSave = async () => {
-    if (selectedFile) {
-      await saveFile(selectedFile);
-    } else {
-      const currentProject = projectManager.getCurrentProject();
-      if (currentProject) {
-        await saveProject(files, currentProject.metadata.name);
+    const currentProject = projectManager.getCurrentProject();
+    if (currentProject) {
+      if (selectedFile) {
+        await saveFile(selectedFile);
+      } else {
+        await saveProject(currentProject);
       }
     }
   };
 
   const handleSaveLocationSetup = async () => {
-    const success = await configureSaveLocation();
-    if (success) {
-      setShowSavePrompt(false);
-      if (savePromptTimer) {
-        clearTimeout(savePromptTimer);
-        setSavePromptTimer(null);
+    const currentProject = projectManager.getCurrentProject();
+    if (currentProject) {
+      const success = await configureSaveLocation(currentProject.metadata.id, currentProject.metadata.name);
+      if (success) {
+        setShowSavePrompt(false);
       }
     }
   };

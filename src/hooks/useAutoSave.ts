@@ -1,8 +1,8 @@
-
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { toast } from 'sonner';
 import { FileNode } from '../components/FileExplorer';
 import { localFileSystemService } from '../services/localFileSystemService';
+import { projectStorageService } from '../services/projectStorageService';
 
 export interface ActivityLogEntry {
   timestamp: Date;
@@ -18,7 +18,7 @@ export interface AutoSaveConfig {
 }
 
 export const useAutoSave = (initialConfig?: Partial<AutoSaveConfig>) => {
-  const [isConfigured, setIsConfigured] = useState(false);
+  const [isConfigured, setIsConfigured] = useState(true); // Always configured now with new storage system
   const [activityLog, setActivityLog] = useState<ActivityLogEntry[]>([]);
   const [config, setConfig] = useState<AutoSaveConfig>({
     enabled: true,
@@ -32,9 +32,10 @@ export const useAutoSave = (initialConfig?: Partial<AutoSaveConfig>) => {
   const lastSaveRef = useRef<Date | null>(null);
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
   const currentFileRef = useRef<FileNode | null>(null);
+  const currentProjectIdRef = useRef<string | null>(null);
 
   useEffect(() => {
-    setIsConfigured(localFileSystemService.hasSaveLocation());
+    setIsConfigured(true); // Always configured now with new storage system
   }, []);
 
   // Auto-save interval
@@ -64,10 +65,12 @@ export const useAutoSave = (initialConfig?: Partial<AutoSaveConfig>) => {
   }, []);
 
   const autoSaveFile = useCallback(async (file: FileNode) => {
-    if (!file.content || !config.enabled) return;
+    if (!file.content || !config.enabled || !currentProjectIdRef.current) return;
     
     try {
-      const success = await localFileSystemService.saveFile(file.name, file.content);
+      const { projectStorageService } = await import('../services/projectStorageService');
+      const success = await projectStorageService.saveFile(currentProjectIdRef.current, file);
+      
       if (success) {
         pendingChangesRef.current = false;
         lastSaveRef.current = new Date();
@@ -90,10 +93,12 @@ export const useAutoSave = (initialConfig?: Partial<AutoSaveConfig>) => {
   }, [config.enabled, config.showNotifications, addLogEntry]);
 
   const saveFile = useCallback(async (file: FileNode) => {
-    if (!file.content) return;
+    if (!file.content || !currentProjectIdRef.current) return;
     
     try {
-      const success = await localFileSystemService.saveFile(file.name, file.content);
+      const { projectStorageService } = await import('../services/projectStorageService');
+      const success = await projectStorageService.saveFile(currentProjectIdRef.current, file);
+      
       if (success) {
         pendingChangesRef.current = false;
         lastSaveRef.current = new Date();
@@ -106,26 +111,29 @@ export const useAutoSave = (initialConfig?: Partial<AutoSaveConfig>) => {
     }
   }, [addLogEntry]);
 
-  const saveProject = useCallback(async (files: FileNode[], projectName: string) => {
+  const saveProject = useCallback(async (project: any) => {
     try {
-      const success = await localFileSystemService.saveProject(files, projectName);
+      const { projectStorageService } = await import('../services/projectStorageService');
+      const success = await projectStorageService.saveProject(project);
+      
       if (success) {
         pendingChangesRef.current = false;
         lastSaveRef.current = new Date();
-        addLogEntry(`Saved project: ${projectName}`, 'save');
-        toast.success(`Project saved: ${projectName}`);
+        addLogEntry(`Saved project: ${project.metadata.name}`, 'save');
+        toast.success(`Project saved: ${project.metadata.name}`);
       }
     } catch (error) {
       addLogEntry(`Failed to save project: ${error instanceof Error ? error.message : 'Unknown error'}`, 'error');
-      toast.error(`Failed to save project: ${projectName}`);
+      toast.error(`Failed to save project: ${project.metadata.name}`);
     }
   }, [addLogEntry]);
 
-  const configureSaveLocation = useCallback(async () => {
+  const configureSaveLocation = useCallback(async (projectId: string, projectName: string) => {
     try {
-      const success = await localFileSystemService.promptForSaveLocation();
+      const { projectStorageService } = await import('../services/projectStorageService');
+      const success = await projectStorageService.selectProjectLocation(projectId, projectName);
+      
       if (success) {
-        setIsConfigured(true);
         addLogEntry('Save location configured', 'info');
         toast.success('Save location configured');
       }
@@ -136,6 +144,10 @@ export const useAutoSave = (initialConfig?: Partial<AutoSaveConfig>) => {
       return false;
     }
   }, [addLogEntry]);
+
+  const setCurrentProject = useCallback((projectId: string) => {
+    currentProjectIdRef.current = projectId;
+  }, []);
 
   const markPendingChanges = useCallback((file?: FileNode) => {
     pendingChangesRef.current = true;
@@ -166,6 +178,7 @@ export const useAutoSave = (initialConfig?: Partial<AutoSaveConfig>) => {
     saveFile,
     saveProject,
     configureSaveLocation,
+    setCurrentProject,
     markPendingChanges,
     updateConfig,
     getStatus,
