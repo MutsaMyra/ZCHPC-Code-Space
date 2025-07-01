@@ -1,298 +1,419 @@
-
-import React, { useState } from 'react';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { ArrowLeft, ArrowRight, Check } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { languages, Language } from '../components/LanguageSelector';
-import { projectManager } from '../services/projectManager';
-import { localFileSystemService } from '../services/localFileSystemService';
+import { Card, CardContent } from "@/components/ui/card";
+import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Button } from "@/components/ui/button";
+import { Plus, ArrowLeft, Loader2, ChevronRight } from "lucide-react";
 import { toast } from 'sonner';
+import { projectManager } from '../services/projectManager';
+import { v4 as uuidv4 } from 'uuid';
+import { FileNode } from '../components/FileExplorer';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 
-interface DependencyOption {
+interface Language {
+  id: string;
   name: string;
+  icon: string;
   description: string;
-  popular?: boolean;
+  extensions: string[];
 }
 
-const dependencyOptions: Record<string, DependencyOption[]> = {
+interface Framework {
+  id: string;
+  name: string;
+  icon: string;
+  description: string;
+}
+
+const languages: Language[] = [
+  {
+    id: 'javascript',
+    name: 'JavaScript',
+    icon: '⚛️',
+    description: 'The most popular language in the world',
+    extensions: ['.js', '.jsx']
+  },
+  {
+    id: 'typescript',
+    name: 'TypeScript',
+    icon: '🟦',
+    description: 'A superset of JavaScript that adds static typing',
+    extensions: ['.ts', '.tsx']
+  },
+  {
+    id: 'python',
+    name: 'Python',
+    icon: '🐍',
+    description: 'A general-purpose programming language',
+    extensions: ['.py']
+  },
+  {
+    id: 'java',
+    name: 'Java',
+    icon: '☕',
+    description: 'A widely used object-oriented programming language',
+    extensions: ['.java']
+  },
+  {
+    id: 'html',
+    name: 'HTML',
+    icon: '🌐',
+    description: 'The standard markup language for creating web pages',
+    extensions: ['.html', '.htm']
+  },
+  {
+    id: 'css',
+    name: 'CSS',
+    icon: '🎨',
+    description: 'A style sheet language used for describing the presentation of a document',
+    extensions: ['.css']
+  },
+  {
+    id: 'php',
+    name: 'PHP',
+    icon: '🐘',
+    description: 'A popular general-purpose scripting language that is especially suited to web development.',
+    extensions: ['.php']
+  },
+];
+
+const frameworks: { [languageId: string]: Framework[] } = {
   javascript: [
-    { name: 'react', description: 'React library for building user interfaces', popular: true },
-    { name: 'lodash', description: 'Utility library for JavaScript', popular: true },
-    { name: 'axios', description: 'Promise-based HTTP client', popular: true },
-    { name: 'moment', description: 'Date manipulation library' },
-    { name: 'express', description: 'Web framework for Node.js' },
+    {
+      id: 'react',
+      name: 'React',
+      icon: '⚛️',
+      description: 'A JavaScript library for building user interfaces'
+    },
+    {
+      id: 'vue',
+      name: 'Vue',
+      icon: '🌱',
+      description: 'An approachable, performant and versatile framework for building web user interfaces.'
+    },
+    {
+      id: 'angular',
+      name: 'Angular',
+      icon: '🅰️',
+      description: 'The modern web developer\'s platform'
+    },
+    {
+      id: 'Vanilla',
+      name: 'Vanilla',
+      icon: '🍦',
+      description: 'Write plain Javascript'
+    }
   ],
-  python: [
-    { name: 'requests', description: 'HTTP library for Python', popular: true },
-    { name: 'numpy', description: 'Scientific computing library', popular: true },
-    { name: 'pandas', description: 'Data manipulation and analysis', popular: true },
-    { name: 'flask', description: 'Lightweight web framework' },
-    { name: 'django', description: 'Full-featured web framework' },
+  typescript: [
+    {
+      id: 'react',
+      name: 'React',
+      icon: '⚛️',
+      description: 'A JavaScript library for building user interfaces'
+    },
+    {
+      id: 'angular',
+      name: 'Angular',
+      icon: '🅰️',
+      description: 'The modern web developer\'s platform'
+    },
+    {
+      id: 'Vanilla',
+      name: 'Vanilla',
+      icon: '🍦',
+      description: 'Write plain Typescript'
+    }
+  ],
+  html: [
+    {
+      id: 'Vanilla',
+      name: 'Vanilla',
+      icon: '🍦',
+      description: 'Write plain HTML'
+    }
+  ],
+  css: [
+    {
+      id: 'Vanilla',
+      name: 'Vanilla',
+      icon: '🍦',
+      description: 'Write plain CSS'
+    }
   ],
   php: [
-    { name: 'laravel/laravel', description: 'Laravel web framework', popular: true },
-    { name: 'guzzlehttp/guzzle', description: 'HTTP client library', popular: true },
-    { name: 'monolog/monolog', description: 'Logging library' },
-    { name: 'symfony/console', description: 'Console component' },
-  ],
-  cpp: [
-    { name: 'boost', description: 'Portable C++ libraries', popular: true },
-    { name: 'eigen', description: 'Linear algebra library' },
-    { name: 'opencv', description: 'Computer vision library' },
-  ],
-  java: [
-    { name: 'spring-boot', description: 'Spring Boot framework', popular: true },
-    { name: 'junit', description: 'Testing framework', popular: true },
-    { name: 'jackson', description: 'JSON processing library' },
-    { name: 'apache-commons', description: 'Common utilities' },
-  ],
+    {
+      id: 'Laravel',
+      name: 'Laravel',
+      icon: '🍃',
+      description: 'The PHP Framework for Web Artisans'
+    },
+    {
+      id: 'Symfony',
+      name: 'Symfony',
+      icon: '🌿',
+      description: 'High-performance PHP framework for web development'
+    },
+    {
+      id: 'CodeIgniter',
+      name: 'CodeIgniter',
+      icon: '🔥',
+      description: 'A powerful PHP framework with a very small footprint'
+    },
+    {
+      id: 'Vanilla',
+      name: 'Vanilla',
+      icon: '🍦',
+      description: 'Write plain PHP'
+    }
+  ]
 };
+
+const quickStartTemplates = [
+  {
+    id: 'hello-world',
+    name: 'Hello World',
+    icon: '👋',
+    description: 'A basic template that prints "Hello, World!" to the console.'
+  },
+  {
+    id: 'basic-server',
+    name: 'Basic Server',
+    icon: '🚀',
+    description: 'A simple server setup to handle basic HTTP requests.'
+  },
+  {
+    id: 'react-app',
+    name: 'React App',
+    icon: '⚛️',
+    description: 'A simple react app.'
+  },
+];
 
 const CreateProject = () => {
   const navigate = useNavigate();
-  const [step, setStep] = useState(1);
   const [projectName, setProjectName] = useState('');
-  const [selectedLanguage, setSelectedLanguage] = useState<Language | null>(null);
-  const [projectType, setProjectType] = useState<'vanilla' | 'framework'>('vanilla');
-  const [selectedDependencies, setSelectedDependencies] = useState<string[]>([]);
+  const [selectedLanguage, setSelectedLanguage] = useState<string | null>(null);
+  const [selectedFramework, setSelectedFramework] = useState<string | null>(null);
+  const [description, setDescription] = useState('');
   const [isCreating, setIsCreating] = useState(false);
 
-  const handleLanguageSelect = (language: Language) => {
-    setSelectedLanguage(language);
-    setSelectedDependencies([]);
+  useEffect(() => {
+    document.title = 'New Project | ZCHPC Code Spaces';
+  }, []);
+
+  const handleLanguageSelect = (languageId: string) => {
+    setSelectedLanguage(languageId);
+    setSelectedFramework(null);
   };
 
-  const toggleDependency = (depName: string) => {
-    setSelectedDependencies(prev => 
-      prev.includes(depName) 
-        ? prev.filter(d => d !== depName)
-        : [...prev, depName]
-    );
+  const getFrameworksForLanguage = (languageId: string): Framework[] => {
+    return frameworks[languageId] || [];
+  };
+
+  const handleFrameworkChange = (framework: string) => {
+    // Disabled - show tooltip instead
+    return;
   };
 
   const handleCreateProject = async () => {
-    if (!selectedLanguage || !projectName.trim()) {
-      toast.error('Please fill in all required fields');
+    if (!projectName.trim()) {
+      toast.error('Project name is required');
+      return;
+    }
+
+    if (!selectedLanguage) {
+      toast.error('Please select a language');
       return;
     }
 
     setIsCreating(true);
-    
-    try {
-      // First prompt for save location
-      const saveLocationSelected = await localFileSystemService.promptForSaveLocation();
-      if (!saveLocationSelected) {
-        toast.error('Please select a save location to continue');
-        setIsCreating(false);
-        return;
-      }
 
-      const framework = projectType === 'framework' ? selectedLanguage.framework : 'vanilla';
-      
-      const project = projectManager.createProject(
-        projectName.trim(),
-        selectedLanguage.id,
-        framework,
-        selectedDependencies,
-        projectType
-      );
-      
-      // Save project to local file system immediately
-      await localFileSystemService.saveProject(project.files, projectName.trim());
-      
-      toast.success('Project created and saved locally!');
-      navigate('/editor');
+    try {
+      const projectId = uuidv4();
+      const initialFiles: FileNode[] = [
+        {
+          id: uuidv4(),
+          name: 'main' + languages.find(lang => lang.id === selectedLanguage)!.extensions[0],
+          content: '',
+          type: 'file',
+          parentId: null,
+        }
+      ];
+
+      await projectManager.createProject({
+        id: projectId,
+        name: projectName,
+        language: selectedLanguage,
+        framework: selectedFramework || 'Vanilla',
+        description: description,
+        files: initialFiles,
+      });
+
+      toast.success('Project created successfully!');
+      navigate(`/editor/${projectId}`);
     } catch (error) {
-      toast.error('Failed to create project');
-      console.error('Project creation error:', error);
+      console.error('Failed to create project:', error);
+      toast.error('Failed to create project. Please try again.');
     } finally {
       setIsCreating(false);
     }
   };
 
-  const canProceedToStep2 = projectName.trim() && selectedLanguage;
-  const canCreateProject = canProceedToStep2;
+  const handleQuickStart = async (templateId: string) => {
+    toast.info(`Loading quick start template: ${templateId}`);
+  };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900">
+    <div className="min-h-screen bg-editor">
       <div className="container mx-auto px-4 py-8">
-        <div className="max-w-4xl mx-auto">
-          <div className="flex items-center mb-8">
-            <Button 
-              variant="ghost" 
-              onClick={() => navigate('/')}
-              className="text-slate-300 hover:text-white"
-            >
-              <ArrowLeft className="h-4 w-4 mr-2" />
-              Back to Projects
-            </Button>
-          </div>
-
+        <div className="max-w-2xl mx-auto">
           <div className="text-center mb-8">
             <h1 className="text-3xl font-bold text-white mb-2">Create New Project</h1>
-            <p className="text-slate-400">Set up your development environment in just a few steps</p>
+            <p className="text-editor-text-muted">Choose your language and framework to get started</p>
           </div>
 
-          {/* Step Indicator */}
-          <div className="flex justify-center mb-8">
-            <div className="flex items-center space-x-4">
-              <div className={`flex items-center justify-center w-8 h-8 rounded-full ${step >= 1 ? 'bg-blue-600 text-white' : 'bg-slate-700 text-slate-400'}`}>
-                {step > 1 ? <Check className="h-4 w-4" /> : '1'}
+          <Card className="bg-editor-sidebar border-editor-border">
+            <CardContent className="p-6 space-y-6">
+              {/* Project Name */}
+              <div className="space-y-2">
+                <Label htmlFor="project-name" className="text-editor-text">Project Name</Label>
+                <Input
+                  id="project-name"
+                  value={projectName}
+                  onChange={(e) => setProjectName(e.target.value)}
+                  placeholder="My Awesome Project"
+                  className="bg-editor border-editor-border text-editor-text"
+                />
               </div>
-              <div className={`w-12 h-1 ${step >= 2 ? 'bg-blue-600' : 'bg-slate-700'}`}></div>
-              <div className={`flex items-center justify-center w-8 h-8 rounded-full ${step >= 2 ? 'bg-blue-600 text-white' : 'bg-slate-700 text-slate-400'}`}>
-                {step > 2 ? <Check className="h-4 w-4" /> : '2'}
-              </div>
-            </div>
-          </div>
 
-          {step === 1 && (
-            <Card className="bg-slate-800 border-slate-700">
-              <CardHeader>
-                <CardTitle className="text-white">Project Configuration</CardTitle>
-                <CardDescription className="text-slate-400">
-                  Configure your project details and select technology stack
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-6">
-                <div className="space-y-2">
-                  <Label htmlFor="projectName" className="text-white">Project Name</Label>
-                  <Input
-                    id="projectName"
-                    value={projectName}
-                    onChange={(e) => setProjectName(e.target.value)}
-                    placeholder="Enter project name"
-                    className="bg-slate-700 border-slate-600 text-white"
-                  />
-                </div>
-
-                <div className="space-y-3">
-                  <Label className="text-white">Select Language</Label>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                    {languages.map((language) => (
-                      <div
-                        key={language.id}
-                        onClick={() => handleLanguageSelect(language)}
-                        className={`p-4 rounded-lg border cursor-pointer transition-colors ${
-                          selectedLanguage?.id === language.id
-                            ? 'bg-blue-600 border-blue-500 text-white'
-                            : 'bg-slate-700 border-slate-600 text-slate-300 hover:bg-slate-600'
-                        }`}
-                      >
-                        <div className="flex items-center space-x-3">
-                          <span className="text-2xl">{language.icon}</span>
-                          <div>
-                            <div className="font-medium">{language.name}</div>
-                            <div className="text-sm opacity-80">{language.framework}</div>
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                {selectedLanguage && (
-                  <div className="space-y-3">
-                    <Label className="text-white">Project Type</Label>
-                    <Select value={projectType} onValueChange={(value: 'vanilla' | 'framework') => setProjectType(value)}>
-                      <SelectTrigger className="bg-slate-700 border-slate-600 text-white">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent className="bg-slate-700 border-slate-600">
-                        <SelectItem value="vanilla" className="text-white">
-                          Vanilla {selectedLanguage.name}
-                        </SelectItem>
-                        <SelectItem value="framework" className="text-white">
-                          {selectedLanguage.framework} Project
-                        </SelectItem>
-                      </SelectContent>
-                    </Select>
-                    <p className="text-sm text-slate-400">
-                      {projectType === 'vanilla' 
-                        ? `A minimal ${selectedLanguage.name} setup for quick scripting and learning`
-                        : `A complete ${selectedLanguage.framework} project with proper structure and configuration`
-                      }
-                    </p>
-                  </div>
-                )}
-
-                <div className="flex justify-end">
-                  <Button 
-                    onClick={() => setStep(2)}
-                    disabled={!canProceedToStep2}
-                    className="bg-blue-600 hover:bg-blue-700"
-                  >
-                    Next <ArrowRight className="h-4 w-4 ml-2" />
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-          )}
-
-          {step === 2 && selectedLanguage && (
-            <Card className="bg-slate-800 border-slate-700">
-              <CardHeader>
-                <CardTitle className="text-white">Dependencies & Libraries</CardTitle>
-                <CardDescription className="text-slate-400">
-                  Select the dependencies you want to include in your {selectedLanguage.name} project
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-6">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  {dependencyOptions[selectedLanguage.id]?.map((dep) => (
+              {/* Language Selection */}
+              <div className="space-y-3">
+                <Label className="text-editor-text">Programming Language</Label>
+                <div className="grid grid-cols-2 gap-3">
+                  {languages.map((lang) => (
                     <div
-                      key={dep.name}
-                      onClick={() => toggleDependency(dep.name)}
-                      className={`p-4 rounded-lg border cursor-pointer transition-colors ${
-                        selectedDependencies.includes(dep.name)
-                          ? 'bg-blue-600 border-blue-500 text-white'
-                          : 'bg-slate-700 border-slate-600 text-slate-300 hover:bg-slate-600'
+                      key={lang.id}
+                      onClick={() => handleLanguageSelect(lang.id)}
+                      className={`p-4 rounded-lg border cursor-pointer transition-all ${
+                        selectedLanguage === lang.id
+                          ? 'border-blue-500 bg-blue-500/10'
+                          : 'border-editor-border bg-editor-active hover:border-editor-border-hover'
                       }`}
                     >
-                      <div className="flex items-start justify-between">
-                        <div className="flex-1">
-                          <div className="font-medium flex items-center">
-                            {dep.name}
-                            {dep.popular && (
-                              <span className="ml-2 px-2 py-1 text-xs bg-orange-500 text-white rounded">
-                                Popular
-                              </span>
-                            )}
-                          </div>
-                          <div className="text-sm opacity-80 mt-1">{dep.description}</div>
+                      <div className="flex items-center space-x-3">
+                        <span className="text-2xl">{lang.icon}</span>
+                        <div>
+                          <h3 className="font-medium text-editor-text">{lang.name}</h3>
+                          <p className="text-sm text-editor-text-muted">{lang.description}</p>
                         </div>
-                        {selectedDependencies.includes(dep.name) && (
-                          <Check className="h-5 w-5 flex-shrink-0 ml-2" />
-                        )}
                       </div>
                     </div>
                   ))}
                 </div>
+              </div>
 
-                <div className="flex justify-between">
-                  <Button 
-                    variant="outline" 
-                    onClick={() => setStep(1)}
-                    className="border-slate-600 text-slate-300"
-                  >
-                    <ArrowLeft className="h-4 w-4 mr-2" />
-                    Back
-                  </Button>
-                  <Button 
-                    onClick={handleCreateProject}
-                    disabled={!canCreateProject || isCreating}
-                    className="bg-green-600 hover:bg-green-700"
-                  >
-                    {isCreating ? 'Creating Project...' : 'Create & Save Project'}
-                  </Button>
+              {/* Framework Selection - Disabled */}
+              {selectedLanguage && (
+                <div className="space-y-3">
+                  <Label className="text-editor-text">Framework (Optional)</Label>
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <div className="grid grid-cols-2 gap-3 opacity-50 cursor-not-allowed">
+                          {getFrameworksForLanguage(selectedLanguage).map((framework) => (
+                            <div
+                              key={framework.id}
+                              className="p-3 rounded-lg border border-editor-border bg-editor-active"
+                            >
+                              <div className="flex items-center space-x-2">
+                                <span className="text-lg">{framework.icon}</span>
+                                <div>
+                                  <h4 className="font-medium text-editor-text text-sm">{framework.name}</h4>
+                                  <p className="text-xs text-editor-text-muted">{framework.description}</p>
+                                </div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        <p>Feature coming soon</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
                 </div>
-              </CardContent>
-            </Card>
-          )}
+              )}
+
+              {/* Project Description */}
+              <div className="space-y-2">
+                <Label htmlFor="description" className="text-editor-text">Description (Optional)</Label>
+                <Textarea
+                  id="description"
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
+                  placeholder="Describe your project..."
+                  className="bg-editor border-editor-border text-editor-text"
+                  rows={3}
+                />
+              </div>
+
+              {/* Create Button */}
+              <div className="flex space-x-4">
+                <Button
+                  onClick={handleCreateProject}
+                  disabled={!projectName.trim() || !selectedLanguage || isCreating}
+                  className="flex-1"
+                >
+                  {isCreating ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      Creating...
+                    </>
+                  ) : (
+                    <>
+                      <Plus className="h-4 w-4 mr-2" />
+                      Create Project
+                    </>
+                  )}
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={() => navigate('/')}
+                  className="bg-editor-sidebar border-editor-border text-editor-text"
+                >
+                  <ArrowLeft className="h-4 w-4 mr-2" />
+                  Back
+                </Button>
+              </div>
+
+              {/* Quick Start Templates */}
+              <div className="mt-8 pt-6 border-t border-editor-border">
+                <h3 className="text-lg font-medium text-editor-text mb-4">Quick Start Templates</h3>
+                <div className="grid grid-cols-1 gap-3">
+                  {quickStartTemplates.map((template) => (
+                    <div
+                      key={template.id}
+                      onClick={() => handleQuickStart(template.id)}
+                      className="p-4 rounded-lg border border-editor-border bg-editor-active hover:border-editor-border-hover cursor-pointer transition-all"
+                    >
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center space-x-3">
+                          <span className="text-xl">{template.icon}</span>
+                          <div>
+                            <h4 className="font-medium text-editor-text">{template.name}</h4>
+                            <p className="text-sm text-editor-text-muted">{template.description}</p>
+                          </div>
+                        </div>
+                        <ChevronRight className="h-5 w-5 text-editor-text-muted" />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </CardContent>
+          </Card>
         </div>
       </div>
     </div>

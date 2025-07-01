@@ -1,7 +1,7 @@
-
 import React, { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Badge } from "@/components/ui/badge";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 
 interface ServerStatusProps {
   language: string;
@@ -24,28 +24,13 @@ const ServerStatus: React.FC<ServerStatusProps> = ({ language, isOnline }) => {
   }, [isOnline, status]);
 
   const connectToServer = () => {
-    if (!isOnline) return;
-    
-    setStatus('connecting');
-    
-    // Simulate connection delay
-    setTimeout(() => {
-      setStatus('connected');
-      setServerInfo({
-        language,
-        memory: `${Math.floor(Math.random() * 512) + 256} MB`,
-        cpuLoad: `${Math.floor(Math.random() * 30) + 10}%`,
-      });
-    }, 1500);
+    // Disabled - show tooltip instead
+    return;
   };
 
   const disconnectFromServer = () => {
-    setStatus('disconnected');
-    setServerInfo({
-      language: '',
-      memory: '0 MB',
-      cpuLoad: '0%',
-    });
+    // Disabled - show tooltip instead  
+    return;
   };
 
   // Update server info when language changes
@@ -84,23 +69,23 @@ const ServerStatus: React.FC<ServerStatusProps> = ({ language, isOnline }) => {
         </div>
       )}
 
-      {isOnline ? (
-        <Button 
-          onClick={status !== 'connected' ? connectToServer : disconnectFromServer}
-          className="w-full bg-editor-active hover:bg-blue-700 text-white"
-          variant="default"
-        >
-          {status !== 'connected' ? 'Connect to Server' : 'Disconnect'}
-        </Button>
-      ) : (
-        <Button 
-          disabled
-          className="w-full bg-gray-600 text-gray-300 cursor-not-allowed"
-          variant="default"
-        >
-          Offline Mode - Server Unavailable
-        </Button>
-      )}
+      <TooltipProvider>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button 
+              onClick={status !== 'connected' ? connectToServer : disconnectFromServer}
+              className="w-full bg-editor-active hover:bg-blue-700 text-white opacity-50 cursor-not-allowed"
+              variant="default"
+              disabled
+            >
+              {status !== 'connected' ? 'Connect to Server' : 'Disconnect'}
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>
+            <p>Feature coming soon</p>
+          </TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
     </div>
   );
 };

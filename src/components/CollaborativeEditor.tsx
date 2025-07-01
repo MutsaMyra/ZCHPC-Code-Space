@@ -4,6 +4,7 @@ import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { Users, MessageCircle, Share2, Eye, Edit, Crown } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -77,24 +78,8 @@ const CollaborativeEditor: React.FC<CollaborativeEditorProps> = ({
   }, [projectId]);
 
   const handleInviteCollaborator = () => {
-    if (!inviteEmail.trim()) {
-      toast.error('Please enter an email address');
-      return;
-    }
-
-    const newCollaborator: Collaborator = {
-      id: `collab-${Date.now()}`,
-      name: inviteEmail.split('@')[0],
-      email: inviteEmail,
-      role: selectedRole,
-      isOnline: Math.random() > 0.3,
-      color: `#${Math.floor(Math.random() * 16777215).toString(16)}`
-    };
-
-    setCollaborators(prev => [...prev, newCollaborator]);
-    setInviteEmail('');
-    
-    toast.success(`Invited ${inviteEmail} as ${selectedRole}`);
+    // Disabled - show tooltip instead
+    return;
   };
 
   const handleAddComment = () => {
@@ -167,7 +152,7 @@ const CollaborativeEditor: React.FC<CollaborativeEditorProps> = ({
             ))}
           </div>
 
-          {/* Invite New Collaborator */}
+          {/* Invite New Collaborator - Disabled */}
           <div className="space-y-2 pt-2 border-t border-editor-border">
             <div className="flex space-x-2">
               <Input
@@ -175,23 +160,35 @@ const CollaborativeEditor: React.FC<CollaborativeEditorProps> = ({
                 value={inviteEmail}
                 onChange={(e) => setInviteEmail(e.target.value)}
                 className="bg-editor border-editor-border text-editor-text"
+                disabled
               />
               <select 
                 value={selectedRole}
                 onChange={(e) => setSelectedRole(e.target.value as 'editor' | 'viewer')}
-                className="bg-editor border-editor-border text-editor-text rounded px-3"
+                className="bg-editor border-editor-border text-editor-text rounded px-3 opacity-50 cursor-not-allowed"
+                disabled
               >
                 <option value="editor">Editor</option>
                 <option value="viewer">Viewer</option>
               </select>
             </div>
-            <Button 
-              onClick={handleInviteCollaborator}
-              size="sm" 
-              className="w-full"
-            >
-              Invite
-            </Button>
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button 
+                    onClick={handleInviteCollaborator}
+                    size="sm" 
+                    className="w-full opacity-50 cursor-not-allowed"
+                    disabled
+                  >
+                    Invite
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>Feature coming soon</p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
           </div>
 
           {/* Share Link */}
