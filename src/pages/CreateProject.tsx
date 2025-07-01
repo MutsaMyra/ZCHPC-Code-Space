@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Card, CardContent } from "@/components/ui/card";
@@ -238,18 +239,17 @@ const CreateProject = () => {
           name: 'main' + languages.find(lang => lang.id === selectedLanguage)!.extensions[0],
           content: '',
           type: 'file',
-          parentId: null,
         }
       ];
 
-      await projectManager.createProject({
-        id: projectId,
-        name: projectName,
-        language: selectedLanguage,
-        framework: selectedFramework || 'Vanilla',
-        description: description,
-        files: initialFiles,
-      });
+      await projectManager.createProject(
+        projectId,
+        projectName,
+        selectedLanguage,
+        selectedFramework || 'Vanilla',
+        description,
+        initialFiles
+      );
 
       toast.success('Project created successfully!');
       navigate(`/editor/${projectId}`);
