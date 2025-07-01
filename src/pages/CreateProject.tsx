@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Card, CardContent } from "@/components/ui/card";
@@ -247,8 +246,7 @@ const CreateProject = () => {
         projectName,
         selectedLanguage,
         selectedFramework || 'Vanilla',
-        description,
-        initialFiles
+        description
       );
 
       toast.success('Project created successfully!');
