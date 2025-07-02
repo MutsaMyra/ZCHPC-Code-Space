@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useParams } from 'react-router-dom';
 import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from "@/components/ui/resizable";
 import Navbar from '../components/Navbar';
 import FileExplorerPanel from '../components/FileExplorerPanel';
@@ -16,6 +17,7 @@ import { projectManager } from '../services/projectManager';
 import { webPreviewService } from '../services/webPreviewService';
 
 const Index = () => {
+  const { projectId } = useParams();
   const [selectedFile, setSelectedFile] = useState<FileNode | null>(null);
   const [selectedLanguage, setSelectedLanguage] = useState('javascript');
   const [files, setFiles] = useState<FileNode[]>([]);
@@ -38,39 +40,75 @@ const Index = () => {
   });
 
   useEffect(() => {
-    const currentProject = projectManager.getCurrentProject();
-    if (currentProject) {
-      setFiles(currentProject.files);
-      setSelectedLanguage(currentProject.metadata.language);
-      setCurrentProject(currentProject.metadata.id);
-      
-      // Check if project has storage location, if not, prompt for it
-      const checkStorageLocation = async () => {
-        const { projectStorageService } = await import('../services/projectStorageService');
-        if (!projectStorageService.hasProjectLocation(currentProject.metadata.id)) {
-          setShowSavePrompt(true);
+    // Handle project loading based on URL parameter
+    if (projectId) {
+      const project = projectManager.getProject(projectId);
+      if (project) {
+        projectManager.setCurrentProject(projectId);
+        setFiles(project.files);
+        setSelectedLanguage(project.metadata.language);
+        setCurrentProject(project.metadata.id);
+        
+        // Check if project has storage location, if not, prompt for it
+        const checkStorageLocation = async () => {
+          const { projectStorageService } = await import('../services/projectStorageService');
+          if (!projectStorageService.hasProjectLocation(project.metadata.id)) {
+            setShowSavePrompt(true);
+          }
+        };
+        checkStorageLocation();
+        
+        const isWebProject = isWebProjectType(
+          project.metadata.language, 
+          project.metadata.framework
+        );
+        setShowWebPreview(isWebProject);
+        
+        webPreviewService.setProjectContext(
+          project.metadata.language, 
+          project.metadata.framework || 'Vanilla'
+        );
+        
+        if (project.files.length > 0) {
+          setSelectedFile(project.files[0]);
         }
-      };
-      checkStorageLocation();
-      
-      const isWebProject = isWebProjectType(
-        currentProject.metadata.language, 
-        currentProject.metadata.framework
-      );
-      setShowWebPreview(isWebProject);
-      
-      webPreviewService.setProjectContext(
-        currentProject.metadata.language, 
-        currentProject.metadata.framework || 'Vanilla'
-      );
-      
-      if (currentProject.files.length > 0) {
-        setSelectedFile(currentProject.files[0]);
       }
     } else {
-      setFiles(fileSystemService.getFiles());
+      // Fallback to current project or default files
+      const currentProject = projectManager.getCurrentProject();
+      if (currentProject) {
+        setFiles(currentProject.files);
+        setSelectedLanguage(currentProject.metadata.language);
+        setCurrentProject(currentProject.metadata.id);
+        
+        // Check if project has storage location, if not, prompt for it
+        const checkStorageLocation = async () => {
+          const { projectStorageService } = await import('../services/projectStorageService');
+          if (!projectStorageService.hasProjectLocation(currentProject.metadata.id)) {
+            setShowSavePrompt(true);
+          }
+        };
+        checkStorageLocation();
+        
+        const isWebProject = isWebProjectType(
+          currentProject.metadata.language, 
+          currentProject.metadata.framework
+        );
+        setShowWebPreview(isWebProject);
+        
+        webPreviewService.setProjectContext(
+          currentProject.metadata.language, 
+          currentProject.metadata.framework || 'Vanilla'
+        );
+        
+        if (currentProject.files.length > 0) {
+          setSelectedFile(currentProject.files[0]);
+        }
+      } else {
+        setFiles(fileSystemService.getFiles());
+      }
     }
-  }, [setCurrentProject]);
+  }, [projectId, setCurrentProject]);
 
   useEffect(() => {
     const handleOnline = () => setIsOnline(true);
