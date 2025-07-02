@@ -2,7 +2,8 @@
 import React from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Plus, FolderOpen, Code, Clock } from 'lucide-react';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
+import { Plus, FolderOpen, Code, Clock, Trash2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { projectManager, ProjectMetadata } from '../services/projectManager';
 
@@ -20,7 +21,12 @@ const Landing = () => {
 
   const handleOpenProject = (projectId: string) => {
     projectManager.setCurrentProject(projectId);
-    navigate('/editor');
+    navigate(`/editor/${projectId}`);
+  };
+
+  const handleDeleteProject = (projectId: string, projectName: string) => {
+    projectManager.deleteProject(projectId);
+    setProjects(projectManager.getAllProjects());
   };
 
   const formatDate = (date: Date) => {
@@ -65,41 +71,81 @@ const Landing = () => {
               {projects.map((project) => (
                 <Card 
                   key={project.id}
-                  className="bg-slate-800 border-slate-700 hover:bg-slate-750 transition-colors cursor-pointer"
-                  onClick={() => handleOpenProject(project.id)}
+                  className="bg-slate-800 border-slate-700 hover:bg-slate-750 transition-colors relative group"
                 >
-                  <CardHeader className="pb-3">
-                    <CardTitle className="text-white flex items-center justify-between">
-                      <span className="truncate">{project.name}</span>
-                      <Code className="h-5 w-5 text-blue-400 flex-shrink-0 ml-2" />
-                    </CardTitle>
-                    <CardDescription className="text-slate-400">
-                      {project.language} • {project.framework}
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="flex items-center text-sm text-slate-500">
-                      <Clock className="h-4 w-4 mr-1" />
-                      Last modified {formatDate(project.lastModified)}
-                    </div>
-                    {project.dependencies.length > 0 && (
-                      <div className="mt-2 flex flex-wrap gap-1">
-                        {project.dependencies.slice(0, 3).map((dep) => (
-                          <span 
-                            key={dep}
-                            className="px-2 py-1 bg-slate-700 text-slate-300 rounded text-xs"
-                          >
-                            {dep}
-                          </span>
-                        ))}
-                        {project.dependencies.length > 3 && (
-                          <span className="px-2 py-1 bg-slate-700 text-slate-400 rounded text-xs">
-                            +{project.dependencies.length - 3} more
-                          </span>
-                        )}
+                  <div 
+                    className="cursor-pointer"
+                    onClick={() => handleOpenProject(project.id)}
+                  >
+                    <CardHeader className="pb-3">
+                      <CardTitle className="text-white flex items-center justify-between">
+                        <span className="truncate">{project.name}</span>
+                        <Code className="h-5 w-5 text-blue-400 flex-shrink-0 ml-2" />
+                      </CardTitle>
+                      <CardDescription className="text-slate-400">
+                        {project.language} • {project.framework}
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="flex items-center text-sm text-slate-500">
+                        <Clock className="h-4 w-4 mr-1" />
+                        Last modified {formatDate(project.lastModified)}
                       </div>
-                    )}
-                  </CardContent>
+                      {project.dependencies.length > 0 && (
+                        <div className="mt-2 flex flex-wrap gap-1">
+                          {project.dependencies.slice(0, 3).map((dep) => (
+                            <span 
+                              key={dep}
+                              className="px-2 py-1 bg-slate-700 text-slate-300 rounded text-xs"
+                            >
+                              {dep}
+                            </span>
+                          ))}
+                          {project.dependencies.length > 3 && (
+                            <span className="px-2 py-1 bg-slate-700 text-slate-400 rounded text-xs">
+                              +{project.dependencies.length - 3} more
+                            </span>
+                          )}
+                        </div>
+                      )}
+                    </CardContent>
+                  </div>
+                  
+                  <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <AlertDialog>
+                      <AlertDialogTrigger asChild>
+                        <Button
+                          variant="destructive"
+                          size="sm"
+                          className="h-8 w-8 p-0"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </AlertDialogTrigger>
+                      <AlertDialogContent className="bg-slate-800 border-slate-700">
+                        <AlertDialogHeader>
+                          <AlertDialogTitle className="text-white">
+                            Delete Project
+                          </AlertDialogTitle>
+                          <AlertDialogDescription className="text-slate-300">
+                            Are you sure you want to delete "{project.name}"? This action cannot be undone.
+                          </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                          <AlertDialogCancel className="bg-slate-700 text-white border-slate-600 hover:bg-slate-600">
+                            Cancel
+                          </AlertDialogCancel>
+                          <AlertDialogAction
+                            onClick={() => handleDeleteProject(project.id, project.name)}
+                            className="bg-red-600 hover:bg-red-700"
+                          >
+                            Delete
+                          </AlertDialogAction>
+                        </AlertDialogFooter>
+                      </AlertDialogContent>
+                    </AlertDialog>
+                  </div>
                 </Card>
               ))}
             </div>
