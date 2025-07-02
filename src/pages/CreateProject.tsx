@@ -57,6 +57,13 @@ const languages: Language[] = [
     extensions: ['.java']
   },
   {
+    id: 'cpp',
+    name: 'C++',
+    icon: '⚡',
+    description: 'A powerful system programming language',
+    extensions: ['.cpp', '.cc', '.cxx']
+  },
+  {
     id: 'html',
     name: 'HTML',
     icon: '🌐',
@@ -231,8 +238,6 @@ const CreateProject = () => {
     setIsCreating(true);
 
     try {
-      const projectId = uuidv4();
-
       const project = await projectManager.createProject(
         projectName,
         selectedLanguage,
@@ -247,7 +252,7 @@ const CreateProject = () => {
       }
 
       toast.success('Project created successfully!');
-      navigate(`/editor/${projectId}`);
+      navigate(`/editor/${project.metadata.id}`);
     } catch (error) {
       console.error('Failed to create project:', error);
       toast.error('Failed to create project. Please try again.');
